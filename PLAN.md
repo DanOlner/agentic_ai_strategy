@@ -381,3 +381,68 @@ Added on 20 November 2026, when the page was built. The model, the parameter val
 10. **Test tolerance for `perMillionTokens`.** Section 3c gives values rounded to three decimal places, and the low g CO2e (0.35554) differs from 0.356 by slightly more than a relative 1e-3. That test uses an absolute tolerance of half a unit in the third decimal place instead.
 11. **The sources and assumptions are static HTML,** so that they show without JavaScript. The sources list was generated from `SOURCES` in `model.js`, and a test checks that every source URL appears on the page.
 12. **The footer doesn't link to the repository,** because no remote is configured yet. It names `PLAN.md` and the `docs/` folder instead. Add the link once the repository is on GitHub.
+
+## 9. Added after review: uncertainty intervals and an electric-car comparison
+
+Added on 20 November 2026 at the owner's request, after the review. Open question 6 in section 7 asked for this. The model, the parameter ranges and every value in sections 3 and 4 are unchanged.
+
+**What it adds.** The low and high results set every parameter to its extreme at once. `simulate()` in `docs/model.js` instead draws every parameter the user hasn't set independently, 4,000 times, and reports percentiles of weekly kWh and kg CO2e.
+
+The page now shows:
+
+- a 90% interval under each headline figure;
+- a chart with the 90% and 95% intervals, the median, the all-central estimate and the all-low to all-high extremes;
+- a table of the same intervals.
+
+**How each parameter is drawn:**
+
+- **Weekly tokens, energy per token for each type, PUE and grid intensity:** a split lognormal. The central value is the median, and the low and high values are the 5th and 95th percentiles. Below the median the spread is set by low, above it by high, so a lopsided range such as cache-read energy (1 / 20 / 100) stays lopsided. Values beyond low and high are possible but rare.
+- **Token mix:** a triangular blend between the low-energy and high-energy mixes, peaking at the central mix. Every blend is a valid mix.
+- **Held fixed:** anything the user has set, the share of the plan used, the model size and custom token counts.
+
+**Assumptions to be aware of:**
+
+- **The parameters are independent.** Correlated parameters would widen the intervals.
+- **Reading low and high as 5th and 95th percentiles is our own choice.** Section 3b chose them as plausible bounds, not percentiles.
+- **The intervals are our construction, not confidence intervals from data.** The page says so.
+- **The generator is seeded (mulberry32, seed 1).** So the page shows the same figures on every load.
+- **Every sample uses the same random draws, whether or not a parameter is set.** So moving a control shifts the intervals smoothly. For example, the share used scales every percentile exactly.
+
+**Results (seed 1, 4,000 draws):**
+
+| Full week | kWh: median | 90% interval | 95% interval | kg CO2e: median | 90% interval | 95% interval |
+|---|---|---|---|---|---|---|
+| Pro | 7.7 | 1.8 – 27 | 1.3 – 36 | 2.1 | 0.36 – 8.8 | 0.25 – 12 |
+| Max (formerly Max 5x) | 44 | 12 – 150 | 9.3 – 190 | 12 | 2.4 – 48 | 1.7 – 63 |
+| Ultra (formerly Max 20x) | 91 | 27 – 300 | 21 – 380 | 25 | 5.2 – 96 | 3.6 – 130 |
+
+The median kWh is above the all-central estimate (Max: 44 against 36). Cache-read energy, the biggest driver, has a long upper tail: its high value is 5 times central and its low value one twentieth. The median kg CO2e is close to central, because the grid range is lopsided the other way (94 / 350 / 416). Every 95% interval sits well inside the all-low to all-high extremes. For a Max week, the 90% interval is about 12 times from bottom to top, against 190 times for the extremes.
+
+**Comparisons with intervals.** Each comparison is a fixed multiple of kWh or kg, so its percentiles are the same multiple. For a full Max week:
+
+| Comparison | Median | 90% interval | 95% interval |
+|---|---|---|---|
+| Days of a typical GB home's electricity (Ofgem 2,500 kWh a year, S22) | 6.4 | 1.8 – 22 | 1.4 – 28 |
+| Miles in an average electric car (0.32763 kWh a mile, S21) | 130 | 38 – 450 | 28 – 590 |
+| Miles in an average petrol car (0.26 kg CO2e a mile, S21) | 47 | 9.4 – 190 | 6.4 – 240 |
+
+**The electric-car factor.** DESNZ 2026 (S21), flat file, "SECR kWh UK electricity for EVs", cars by size, battery electric:
+
+- average car 0.32763 kWh a mile (0.20358 a km);
+- small car 0.30165;
+- medium car 0.31257;
+- large car 0.33988.
+
+The 2026 methodology paper (paragraph 5.30 and the xEV data table) says these are adjusted to real-world driving. It also says charging losses are already included under the type-approval protocol, so the figure is electricity drawn from the grid. That makes it a like-for-like comparison with data-centre electricity. The home figure is for Great Britain (Ofgem), so the page says "GB home".
+
+**Tests.**
+
+- `tests/model.test.js` section 17 covers:
+  - the generator and the normal draws;
+  - the percentile mapping, the mix blend and quantile interpolation;
+  - repeatability, ordering, and intervals inside the extremes for every plan;
+  - the Max values in the table above;
+  - seed stability, exact scaling with the share used, collapse when every value is set, and embodied emissions.
+- `tests/page.test.js` covers the headline intervals, the interval table and the static fallback. It also draws the chart in several states (default, Pro, everything set by hand, zero tokens, embodied) and checks it never contains NaN.
+
+**Also done:** the footer now links to the GitHub repository (build note 12).

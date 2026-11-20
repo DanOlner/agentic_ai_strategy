@@ -277,6 +277,29 @@ tr.highlight .bar { background: var(--accent); }
 
 .page-footer { color: var(--text-2); font-size: 0.9rem; padding-bottom: 2rem; }
 
+/* Uncertainty intervals: the SVG chart drawn by app.js, its legend, and the headline's extremes line */
+.stat-extremes { font-size: 0.85rem; }
+.interval-chart { margin: 0.6rem 0 0.4rem; }
+.iv-chart { display: block; width: 100%; height: auto; overflow: visible; }
+.iv-title { fill: var(--text); font-size: 14px; font-weight: 600; }
+.iv-axis-label, .iv-note { fill: var(--text-2); font-size: 12px; }
+.iv-tick-label { fill: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.iv-axis, .iv-tick { stroke: var(--border); stroke-width: 1; }
+.iv-band95 { fill: var(--accent-soft); }
+.iv-band90 { fill: var(--accent); }
+.iv-median { stroke: var(--text); stroke-width: 2.5; }
+.iv-central { fill: var(--panel); stroke: var(--text); stroke-width: 1.5; }
+.iv-extreme, .iv-extreme-cap { stroke: var(--text-2); stroke-width: 1.25; }
+.iv-extreme { stroke-dasharray: 3 3; }
+.iv-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; padding: 0; margin: 0.6rem 0 0; color: var(--text-2); font-size: 0.85rem; }
+.iv-legend li { display: inline-flex; align-items: center; gap: 0.4rem; }
+.sw { display: inline-block; width: 1.1rem; height: 0.8rem; border-radius: 2px; flex: none; }
+.sw-band90 { background: var(--accent); }
+.sw-band95 { background: var(--accent-soft); }
+.sw-median { width: 3px; height: 1rem; border-radius: 0; background: var(--text); }
+.sw-central { width: 0.7rem; height: 0.7rem; border-radius: 50%; border: 1.5px solid var(--text); background: var(--panel); }
+.sw-extreme { height: 0; border-radius: 0; border-top: 1.5px dashed var(--text-2); }
+
 /* Phones */
 @media (max-width: 40rem) {
   .panel { padding: 1rem 0.85rem; border-radius: 6px; }
@@ -296,6 +319,10 @@ tr.highlight .bar { background: var(--accent); }
   .bar, .range-bar, tr.highlight .bar { background: CanvasText; }
   .central-tick { background: Highlight; }
   .bar-track { border: 1px solid CanvasText; }
+  .iv-band90 { fill: Highlight; }
+  .iv-band95 { fill: GrayText; }
+  .sw-band90 { background: Highlight; }
+  .sw-band95 { background: GrayText; }
 }
 
 @media print {

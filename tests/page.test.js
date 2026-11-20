@@ -203,10 +203,10 @@ test('app.js loads and shows a full week of Max by default', () => {
 
 test('the static (no-JavaScript) figures in index.html match what app.js renders', () => {
   const { el } = loadPage();
-  for (const id of ['detail-body', 'permtok-body', 'breakdown-body', 'comparisons-body', 'drivers-body']) {
+  for (const id of ['detail-body', 'permtok-body', 'breakdown-body', 'comparisons-body', 'drivers-body', 'interval-body']) {
     assert.equal(text(el[id].innerHTML), text(staticInner(id)), id);
   }
-  for (const id of ['hl-kwh', 'hl-kwh-range', 'hl-kg', 'hl-kg-range', 'hl-context', 'hl-words',
+  for (const id of ['hl-kwh', 'hl-kwh-range', 'hl-kwh-ci', 'hl-kg', 'hl-kg-range', 'hl-kg-ci', 'hl-context', 'hl-words',
     'hl-kwh-label', 'hl-kg-label', 'breakdown-note', 'overrides', 'share-used-value']) {
     assert.equal(el[id].textContent, text(staticInner(id)), id);
   }
@@ -378,3 +378,84 @@ test('the summary sentence uses "1 day", not "1 days" (found in review: a Pro we
 function page_change(el) {
   (el['controls'].listeners.change || []).forEach((fn) => fn({ type: 'change' }));
 }
+
+// ---------- uncertainty intervals (PLAN.md section 9) ----------
+
+function svgOf(el) {
+  const svg = el['interval-chart'].innerHTML;
+  assert.match(svg, /^<svg class="iv-chart"[^>]*viewBox="0 0 \d+ \d+"/, 'an svg with a viewBox');
+  assert.ok(!/NaN|undefined|Infinity/.test(svg), 'no NaN, undefined or Infinity in the svg');
+  return svg;
+}
+
+test('the interval chart: two panels of bands, a median, the central estimate and the extremes', () => {
+  const { el } = loadPage();
+  const svg = svgOf(el);
+  for (const cls of ['iv-band95', 'iv-band90', 'iv-median', 'iv-central', 'iv-extreme']) {
+    assert.equal((svg.match(new RegExp('class="' + cls + '"', 'g')) || []).length, 2, cls);
+  }
+  assert.match(svg, /Electricity a week \(kWh\)/);
+  assert.match(svg, /Emissions a week \(kg CO2e\)/);
+  assert.match(svg, /Days of a typical GB home’s electricity/);
+  assert.match(svg, /Miles in an average electric car/);
+  assert.match(svg, /Miles in an average petrol car/);
+  const s = M.simulate({ planId: 'max' });
+  assert.match(svg, new RegExp('aria-label="[^"]*median ' + M.formatSig(s.kWh.p50) + ', 90% interval ' +
+    M.formatSig(s.kWh.p5) + DASH + M.formatSig(s.kWh.p95)));
+  // The 90% band sits inside the 95% band.
+  const rect = (cls) => svg.match(new RegExp('<rect class="' + cls + '" x="([\\d.]+)" y="[\\d.]+" width="([\\d.]+)"')).slice(1).map(Number);
+  const [x95, w95] = rect('iv-band95');
+  const [x90, w90] = rect('iv-band90');
+  assert.ok(x90 >= x95 && x90 + w90 <= x95 + w95 + 0.2);
+});
+
+test('the headline and table show the 90% and 95% intervals, and follow the controls', () => {
+  const page = loadPage();
+  const { el } = page;
+  const s = M.simulate({ planId: 'max' });
+  assert.equal(el['hl-kwh-ci'].textContent, M.formatSig(s.kWh.p5) + DASH + M.formatSig(s.kWh.p95));
+  assert.equal(el['hl-kg-ci'].textContent, M.formatSig(s.kgCO2e.p5) + DASH + M.formatSig(s.kgCO2e.p95));
+  assert.equal((el['interval-body'].innerHTML.match(/<tr>/g) || []).length, 5);
+  assert.match(el['interval-body'].innerHTML, /Miles in an average electric car<\/th><td>130<\/td><td>38 – 450<\/td>/);
+
+  el['plan-max'].checked = false;
+  el['plan-pro'].checked = true;
+  page.change();
+  const p = M.simulate({ planId: 'pro' });
+  assert.equal(el['hl-kwh-ci'].textContent, M.formatSig(p.kWh.p5) + DASH + M.formatSig(p.kWh.p95));
+  svgOf(el);
+});
+
+test('the chart copes with collapsed intervals, zero tokens, custom tokens and embodied emissions', () => {
+  const page = loadPage();
+  const { el } = page;
+  // Everything set by hand: no spread at all.
+  el['pue-select'].value = '1.14';
+  el['grid-select'].value = '350';
+  el['wh-input'].value = '201';
+  el['wh-cacheWrite'].value = '251';
+  el['wh-cacheRead'].value = '21';
+  el['wh-output'].value = '1001';
+  el['plan-max'].checked = false;
+  el['plan-custom'].checked = true;
+  page.change();
+  assert.equal(el['hl-kwh-ci'].textContent, el['hl-kwh'].textContent + DASH + el['hl-kwh'].textContent);
+  assert.match(svgOf(el), /Electricity \(kWh\)/, 'no "a week" for custom tokens');
+  // Zero tokens.
+  for (const t of M.TOKEN_TYPES) el['tok-' + t].value = '0';
+  page.change();
+  assert.match(svgOf(el), /Nothing to plot/);
+  assert.equal(el['hl-kwh-ci'].textContent, '0' + DASH + '0');
+  // Back to a plan, with embodied emissions on.
+  el['plan-custom'].checked = false;
+  el['plan-max'].checked = true;
+  el['embodied-toggle'].checked = true;
+  page.change();
+  svgOf(el);
+  assert.notEqual(el['hl-kg-ci'].textContent, '0' + DASH + '0');
+});
+
+test('the uncertainty notice quotes the 90% interval the simulation gives for a Max week', () => {
+  const s = M.simulate({ planId: 'max' });
+  assert.match(text(html), new RegExp('the 90% interval is about ' + M.formatSig(s.kWh.p5) + ' to ' + M.formatSig(s.kWh.p95) + ' kWh'));
+});

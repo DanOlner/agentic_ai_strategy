@@ -19,7 +19,7 @@
     <ul>
       <li><strong>Nobody outside Anthropic knows how much energy a Claude token takes.</strong> Anthropic publishes no energy figures per token, prompt or plan, so every figure here is inferred from other companies’ disclosures, independent estimates for other models, or Anthropic’s API price ratios.</li>
       <li><strong>Nobody outside Anthropic knows how many tokens a plan allows.</strong> Limits are published only as multiples of Pro. The token counts come from two commercial sites’ measurements, one of them a single user.</li>
-      <li><strong>Low and high are extreme cases, not a confidence interval.</strong> “Low” sets every parameter to its low value at once, and “high” sets every one high, so the spread is very wide: for a week of Max, high is about 190 times low in electricity and about 830 times in emissions. They are not guaranteed limits either, because every input is itself uncertain. In our judgement the central value could easily be wrong by a factor of 3 either way.</li>
+      <li><strong>Low and high are extreme cases, not a confidence interval.</strong> “Low” sets every parameter to its low value at once, and “high” sets every one high, so the spread is very wide: for a week of Max, high is about 190 times low in electricity and about 830 times in emissions. They are not guaranteed limits either, because every input is itself uncertain. In our judgement the central value could easily be wrong by a factor of 3 either way. The 90% and 95% intervals with the results vary the inputs at random instead of all together; for a week of Max the 90% interval is about 12 to 150 kWh. They are narrower, but only as reliable as the input ranges.</li>
       <li><strong>The biggest unknown is the energy cost of a cache read.</strong> About 96% of Claude Code tokens are cache reads, and the evidence on their cost is a price ratio, not a measurement.</li>
     </ul>
   </aside>
@@ -160,15 +160,41 @@
     <div class="stat">
       <p class="stat-label" id="hl-kwh-label">Electricity a week</p>
       <p class="stat-value"><span id="hl-kwh">36</span> <span class="unit">kWh</span></p>
-      <p class="stat-range">range <span id="hl-kwh-range">2.3 – 430</span></p>
+      <p class="stat-range">90% interval <span id="hl-kwh-ci">12 – 150</span></p>
+      <p class="stat-range stat-extremes">all low to all high <span id="hl-kwh-range">2.3 – 430</span></p>
     </div>
     <div class="stat">
       <p class="stat-label" id="hl-kg-label">Emissions a week</p>
       <p class="stat-value"><span id="hl-kg">12</span> <span class="unit">kg CO2e</span></p>
-      <p class="stat-range">range <span id="hl-kg-range">0.21 – 180</span></p>
+      <p class="stat-range">90% interval <span id="hl-kg-ci">2.4 – 48</span></p>
+      <p class="stat-range stat-extremes">all low to all high <span id="hl-kg-range">0.21 – 180</span></p>
     </div>
   </div>
-  <p id="hl-words" class="in-words">About 36 kWh is roughly 5.2 days of a typical GB home’s electricity, or 320 one-litre kettle boils. About 12 kg CO2e is like driving an average petrol car 48 miles.</p>
+  <p id="hl-words" class="in-words">About 36 kWh is roughly 5.2 days of a typical GB home’s electricity, 320 one-litre kettle boils, or 110 miles in an average electric car. About 12 kg CO2e is like driving an average petrol car 48 miles.</p>
+
+  <h3>How likely is each value?</h3>
+  <p class="hint">Each input you haven’t set is varied at random within its range, 4,000 times, and the results are ranked. The inner band holds the middle 90% of the results and the outer band the middle 95%. The comparison scales under each band read the same positions in other units. The scale is logarithmic: each step along it multiplies the value.</p>
+  <ul class="iv-legend" aria-hidden="true">
+    <li><span class="sw sw-band90"></span>90% interval</li>
+    <li><span class="sw sw-band95"></span>95% interval</li>
+    <li><span class="sw sw-median"></span>median</li>
+    <li><span class="sw sw-central"></span>every input central</li>
+    <li><span class="sw sw-extreme"></span>every input low to every input high</li>
+  </ul>
+  <div id="interval-chart" class="interval-chart"><p class="hint">The chart needs JavaScript; the table below gives the same intervals.</p></div>
+  <div class="table-wrap">
+    <table class="num-table">
+      <caption class="visually-hidden">Median, 90% and 95% intervals from the simulation</caption>
+      <thead><tr><th scope="col">Quantity</th><th scope="col">Median</th><th scope="col">90% interval</th><th scope="col">95% interval</th></tr></thead>
+      <tbody id="interval-body">
+        <tr><th scope="row">Electricity (kWh)</th><td>44</td><td>12 – 150</td><td>9.3 – 190</td></tr>
+        <tr><th scope="row">Emissions (kg CO2e)</th><td>12</td><td>2.4 – 48</td><td>1.7 – 63</td></tr>
+        <tr><th scope="row">Days of a typical GB home’s electricity</th><td>6.4</td><td>1.8 – 22</td><td>1.4 – 28</td></tr>
+        <tr><th scope="row">Miles in an average electric car</th><td>130</td><td>38 – 450</td><td>28 – 590</td></tr>
+        <tr><th scope="row">Miles in an average petrol car</th><td>47</td><td>9.4 – 190</td><td>6.4 – 240</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h3>Low, central and high</h3>
   <div class="table-wrap">
@@ -227,6 +253,7 @@
         <tr><th scope="row">One-litre kettle boils (0.11 kWh each)</th><td>21</td><td>320</td><td>3,900</td></tr>
         <tr><th scope="row">Days of a typical GB home’s electricity (6.85 kWh a day)</th><td>0.33</td><td>5.2</td><td>62</td></tr>
         <tr><th scope="row">Miles in an average petrol car (0.26 kg CO2e a mile)</th><td>0.82</td><td>48</td><td>680</td></tr>
+        <tr><th scope="row">Miles in an average electric car (0.328 kWh a mile)</th><td>6.9</td><td>110</td><td>1,300</td></tr>
         <tr><th scope="row">The same electricity on the UK grid (kg CO2e at 131 g/kWh)</th><td>0.3</td><td>4.7</td><td>56</td></tr>
         <tr><th scope="row">Median Gemini text prompts (0.24 Wh each)</th><td>9,500</td><td>150,000</td><td>1,800,000</td></tr>
       </tbody>
@@ -264,6 +291,7 @@
   </ol>
   <p>Claude Code sends the whole conversation back to the model on every turn. Anthropic’s prompt cache keeps the model’s working state for the earlier part, so most tokens on each call are <strong>cache reads</strong>. A cache read skips most of the computation, so it should cost much less per token than fresh input (how much less has not been measured), but because there are so many of them they are probably still the largest share of the energy. Output tokens cost the most per token, because each one needs a full pass through the model.</p>
   <p><strong>Where the range comes from.</strong> The low result sets every parameter to its low value at once, and the high result sets every one high. These are extreme cases rather than a statistical interval: it is unlikely that every parameter is at its extreme together, but the true figure could still fall outside them if an input is wrong. If you set a parameter yourself, the low, central and high results all use your value for it. The “what drives the range” table shows which assumption matters most. For a typical Claude Code mix it is the energy of a cache read.</p>
+  <p><strong>The 90% and 95% intervals.</strong> Every input is unlikely to sit at its extreme at once, so the page also simulates the estimate 4,000 times. Each draw picks every input you haven’t set independently. Weekly tokens, the energy of each token type, the PUE and the grid intensity are each drawn so that their central value is the median and their low and high values are the 5th and 95th percentiles (a lognormal that can be lopsided; values beyond low and high are possible but rare). The token mix is drawn between the low-energy and high-energy mixes, most often near the central one. Inputs you have set, the share of the plan used and the model size stay fixed. The bands show the middle 90% and 95% of the 4,000 results. They are <span class="own">our own construction</span>, not statistical confidence intervals from data: they are only as good as the input ranges, and they treat the inputs as unrelated to each other. The median can differ from the all-central estimate because some ranges are lopsided: cache-read energy, for example, runs from 1 to 100 Wh per million tokens around a central 20. The simulation uses a fixed seed, so the page shows the same figures each time.</p>
   <p><strong>Location-based or market-based carbon?</strong> Location-based emissions use the average carbon intensity of the grid where the electricity is used. Market-based emissions subtract the renewable electricity a company has contracted for. Google’s 2024 figures show the gap: 345 g CO2e/kWh location-based against 94 market-based (S4). Market-based figures show what the company has paid for. Location-based figures are closer to the physical effect of extra demand on today’s grid. The central value here is location-based (the US average, 350), and the market-based figure is the low end.</p>
   <p><strong>Not included:</strong> training the model (Watershed, S9, puts it at 32% to 56% of a model’s lifetime footprint), networking, your own computer, water use, and embodied emissions unless you switch them on.</p>
 </section>
@@ -321,6 +349,8 @@
         <tr><th scope="row">Kettle boil</th><td colspan="3">0.11 kWh</td><td class="text-col"><span class="own">Own calculation</span>: 1 litre from 15 °C to 100 °C is 4.186 kJ/kg·K × 85 K = 0.099 kWh, at about 90% efficiency.</td></tr>
         <tr><th scope="row">GB home</th><td colspan="3">6.85 kWh a day</td><td class="text-col">Ofgem’s 2026 medium typical consumption, 2,500 kWh a year (S22).</td></tr>
         <tr><th scope="row">Petrol car</th><td colspan="3">0.26 kg CO2e a mile</td><td class="text-col">DESNZ 2026 average petrol car, 0.16152 kg per km (S21).</td></tr>
+        <tr><th scope="row">Electric car</th><td colspan="3">0.328 kWh a mile</td><td class="text-col">DESNZ 2026 average battery electric car, 0.32763 kWh a mile (S21). This is electricity drawn from the grid: DESNZ adjusts it to real-world driving, and charging losses are included. Small cars use 0.302 and large cars 0.340.</td></tr>
+        <tr><th scope="row">Simulation</th><td colspan="3">4,000 draws, seed 1</td><td class="text-col">For the 90% and 95% intervals; see “How this works”.</td></tr>
         <tr><th scope="row">UK grid</th><td colspan="3">131 g CO2e per kWh</td><td class="text-col">DESNZ 2026, UK electricity generated, based on 2025 data (S21). The 2025 edition gave 177, based on 2023 data; the 2026 edition switched to more recent data.</td></tr>
       </tbody>
     </table>
@@ -352,14 +382,14 @@
     <li id="source-S18"><span class="src-id">S18</span> Anthropic, <a href="https://www.anthropic.com/news/anthropic-amazon-compute">Anthropic and Amazon expand compute partnership / Google and Broadcom partnership</a> (<a href="https://www.anthropic.com/news/google-broadcom-partnership-compute">second page</a>). 20 Apr 2026 and 6 Apr 2026.<br><span class="figure">Figure used: Claude is trained and served on AWS Trainium, Google TPUs and NVIDIA GPUs.</span></li>
     <li id="source-S19"><span class="src-id">S19</span> Epoch AI, <a href="https://epoch.ai/data/ai-data-centers/directory/anthropic-amazon-new-carlisle">AI data centres directory: Anthropic–Amazon New Carlisle</a>. updated 19 Oct 2026.<br><span class="figure">Figure used: The New Carlisle, Indiana site is part of the Anthropic–Amazon Project Rainier collaboration.</span></li>
     <li id="source-S20"><span class="src-id">S20</span> US Environmental Protection Agency, <a href="https://www.epa.gov/egrid/summary-data">eGRID summary data (eGRID2023)</a>. 15 Jan 2025, rev. 12 Jun 2025.<br><span class="figure">Figure used: US average 349.7, RFC West 415.5, California (CAMX) 195.0 gCO2e/kWh (derived from lb/MWh).</span></li>
-    <li id="source-S21"><span class="src-id">S21</span> UK Department for Energy Security and Net Zero, <a href="https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2026">Greenhouse gas reporting: conversion factors 2026</a>. 11 Jun 2026 (flat file revised 31 Jul 2026).<br><span class="figure">Figure used: UK electricity generated 0.13096 kgCO2e/kWh (2025 data); average petrol car 0.16152 kgCO2e/km.</span></li>
+    <li id="source-S21"><span class="src-id">S21</span> UK Department for Energy Security and Net Zero, <a href="https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2026">Greenhouse gas reporting: conversion factors 2026</a>. 11 Jun 2026 (flat file revised 31 Jul 2026).<br><span class="figure">Figure used: UK electricity generated 0.13096 kgCO2e/kWh (2025 data); average petrol car 0.16152 kgCO2e/km; average battery electric car 0.32763 kWh a mile (small 0.30165, large 0.33988), adjusted to real-world driving with charging losses included.</span></li>
     <li id="source-S22"><span class="src-id">S22</span> Ofgem, <a href="https://www.ofgem.gov.uk/sites/default/files/2026-05/Review%20of%20typical%20domestic%20consumption%20values%20decision.pdf">Review of typical domestic consumption values: decision</a>. 27 May 2026.<br><span class="figure">Figure used: Typical GB household electricity: medium 2,500 kWh a year.</span></li>
   </ol>
 </section>
 </main>
 
 <footer class="page-footer">
-  <p>Research done on 20 November 2026. Plan names and prices are as published on that date. The method, the sources and the arithmetic are in <code>PLAN.md</code> in this page’s repository; the code is in its <code>docs/</code> folder.</p>
+  <p>Research done on 20 November 2026. Plan names and prices are as published on that date. The method, the sources and the arithmetic are in <code>PLAN.md</code> in <a href="https://github.com/DanOlner/agentic_ai_strategy">this page’s repository</a>; the code is in its <code>docs/</code> folder.</p>
 </footer>
 
 <script src="model.js"></script>

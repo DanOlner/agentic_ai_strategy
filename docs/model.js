@@ -114,6 +114,7 @@
     ukHomeKWhPerDay: 2500 / 365, // Ofgem 2026 medium TDCV (S22)
     petrolCarKgPerMile: 0.16152 * 1.609344, // DESNZ 2026 average petrol car, 0.16152 kg per km (S21)
     ukGridKgPerKWh: 0.13096, // DESNZ 2026 UK electricity generated (2025 data) (S21)
+    evKWhPerMile: 0.32763, // DESNZ 2026 average battery electric car: grid kWh a mile, real-world, charging losses included (S21)
     geminiPromptWh: 0.24 // Google median Gemini Apps text prompt (S4)
   };
 
@@ -139,7 +140,7 @@
     { id: 'S18', title: 'Anthropic and Amazon expand compute partnership / Google and Broadcom partnership', organisation: 'Anthropic', date: '20 Apr 2026 and 6 Apr 2026', url: 'https://www.anthropic.com/news/anthropic-amazon-compute', extraUrl: 'https://www.anthropic.com/news/google-broadcom-partnership-compute', figure: 'Claude is trained and served on AWS Trainium, Google TPUs and NVIDIA GPUs.' },
     { id: 'S19', title: 'AI data centres directory: Anthropic–Amazon New Carlisle', organisation: 'Epoch AI', date: 'updated 19 Oct 2026', url: 'https://epoch.ai/data/ai-data-centers/directory/anthropic-amazon-new-carlisle', figure: 'The New Carlisle, Indiana site is part of the Anthropic–Amazon Project Rainier collaboration.' },
     { id: 'S20', title: 'eGRID summary data (eGRID2023)', organisation: 'US Environmental Protection Agency', date: '15 Jan 2025, rev. 12 Jun 2025', url: 'https://www.epa.gov/egrid/summary-data', figure: 'US average 349.7, RFC West 415.5, California (CAMX) 195.0 gCO2e/kWh (derived from lb/MWh).' },
-    { id: 'S21', title: 'Greenhouse gas reporting: conversion factors 2026', organisation: 'UK Department for Energy Security and Net Zero', date: '11 Jun 2026 (flat file revised 31 Jul 2026)', url: 'https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2026', figure: 'UK electricity generated 0.13096 kgCO2e/kWh (2025 data); average petrol car 0.16152 kgCO2e/km.' },
+    { id: 'S21', title: 'Greenhouse gas reporting: conversion factors 2026', organisation: 'UK Department for Energy Security and Net Zero', date: '11 Jun 2026 (flat file revised 31 Jul 2026)', url: 'https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2026', figure: 'UK electricity generated 0.13096 kgCO2e/kWh (2025 data); average petrol car 0.16152 kgCO2e/km; average battery electric car 0.32763 kWh a mile (small 0.30165, large 0.33988), adjusted to real-world driving with charging losses included.' },
     { id: 'S22', title: 'Review of typical domestic consumption values: decision', organisation: 'Ofgem', date: '27 May 2026', url: 'https://www.ofgem.gov.uk/sites/default/files/2026-05/Review%20of%20typical%20domestic%20consumption%20values%20decision.pdf', figure: 'Typical GB household electricity: medium 2,500 kWh a year.' }
   ];
 
@@ -412,6 +413,7 @@
       homeDays: kWh / COMPARISONS.ukHomeKWhPerDay,
       carMiles: kgCO2e / COMPARISONS.petrolCarKgPerMile,
       ukGridKg: kWh * COMPARISONS.ukGridKgPerKWh,
+      evMiles: kWh / COMPARISONS.evKWhPerMile,
       geminiPrompts: kWh * 1000 / COMPARISONS.geminiPromptWh
     };
   }
@@ -466,6 +468,139 @@
     return { central: { kWh: base.kWh, kgCO2e: base.totalKgCO2e }, rows: rows };
   }
 
+  /* ---------- uncertainty intervals (Monte Carlo) ---------- */
+
+  /*
+   * The low and high estimates set every parameter to its extreme at once,
+   * which is very unlikely. simulate() instead draws every parameter the
+   * user has not set independently, many times, and reports percentiles:
+   *
+   * - weekly tokens, energy per token (each type), PUE and grid intensity:
+   *   a split lognormal per parameter, with the central value as the median
+   *   and the low and high values as the 5th and 95th percentiles;
+   * - the token mix: a triangular blend between the low-energy and
+   *   high-energy mixes, peaking at the central mix.
+   *
+   * Parameters the user has set, the share of the plan used, the model and
+   * custom token counts are held fixed. The generator is seeded, so the page
+   * shows the same intervals on every load. Every sample uses the same
+   * number of random draws, so moving a control shifts the intervals
+   * smoothly instead of re-shuffling them.
+   */
+  var Z90 = 1.6448536269514722; // 95th percentile of the standard normal
+  var SIM_SAMPLES = 4000;
+  var SIM_SEED = 1;
+  var SIM_PERCENTILES = [2.5, 5, 50, 95, 97.5];
+
+  // Seeded uniform generator on [0, 1) (mulberry32).
+  function seededRandom(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Standard normal draw (Box-Muller), using exactly two uniforms.
+  function standardNormal(rand) {
+    var u = 1 - rand(); // (0, 1]
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  }
+
+  // A value from a {low, central, high} range for a standard normal z:
+  // central at z = 0, low at z = -1.645, high at z = +1.645.
+  function drawFromRange(r, z) {
+    if (r.low > 0 && r.central > 0 && r.high > 0) {
+      var end = z < 0 ? r.low : r.high;
+      return r.central * Math.pow(end / r.central, Math.abs(z) / Z90);
+    }
+    var lin = z < 0 ? r.central + (z / Z90) * (r.central - r.low) : r.central + (z / Z90) * (r.high - r.central);
+    return Math.max(0, lin);
+  }
+
+  // A mix between the low-energy (w = -1), central (0) and high-energy (+1) mixes.
+  function blendMix(w) {
+    var to = w < 0 ? PARAMS.mix.low : PARAMS.mix.high;
+    var f = Math.abs(w);
+    var mix = {};
+    TOKEN_TYPES.forEach(function (t) {
+      mix[t] = PARAMS.mix.central[t] + f * (to[t] - PARAMS.mix.central[t]);
+    });
+    return mix;
+  }
+
+  // Percentile p (0-100) of a sorted array, interpolating between ranks.
+  function quantile(sorted, p) {
+    if (!sorted.length) return NaN;
+    var pos = (sorted.length - 1) * p / 100;
+    var i = Math.floor(pos);
+    var f = pos - i;
+    return i + 1 < sorted.length ? sorted[i] + f * (sorted[i + 1] - sorted[i]) : sorted[i];
+  }
+
+  function summarise(values) {
+    var sorted = values.slice().sort(function (a, b) { return a - b; });
+    var out = { mean: 0 };
+    sorted.forEach(function (v) { out.mean += v / sorted.length; });
+    SIM_PERCENTILES.forEach(function (p) { out['p' + String(p).replace('.', '_')] = quantile(sorted, p); });
+    return out;
+  }
+
+  function isSet(v) { return v !== undefined && v !== null; }
+
+  /*
+   * Monte Carlo percentiles of weekly kWh and kg CO2e (total, including
+   * embodied emissions when they are switched on). inputs as for
+   * resolveInputs; options: { n, seed }. Returns
+   * { n, seed, kWh: {p2_5, p5, p50, p95, p97_5, mean}, kgCO2e: {...} }.
+   */
+  function simulate(inputs, options) {
+    inputs = inputs || {};
+    var o = options || {};
+    var n = o.n || SIM_SAMPLES;
+    var seed = o.seed === undefined ? SIM_SEED : o.seed;
+    var rand = seededRandom(seed);
+    var base = resolveInputs(inputs, 'central'); // validates, and holds every value the user set
+    var custom = !!inputs.tokensByType;
+    var tokenRange = null;
+    if (!custom) {
+      if (!isSet(inputs.totalTokens)) tokenRange = PLANS[inputs.planId || DEFAULT_PLAN].tokens;
+      else if (isRange(inputs.totalTokens)) tokenRange = inputs.totalTokens;
+    }
+    var drawMix = !custom && !isSet(inputs.mix);
+    var wOver = inputs.whPerMTok || {};
+    var kwh = new Array(n);
+    var kg = new Array(n);
+
+    for (var i = 0; i < n; i++) {
+      // Always draw the same set, used or not (see the comment above).
+      var zTokens = standardNormal(rand);
+      var w = rand() + rand() - 1;
+      var zWh = TOKEN_TYPES.map(function () { return standardNormal(rand); });
+      var zPue = standardNormal(rand);
+      var zGrid = standardNormal(rand);
+
+      var whPerMTok = {};
+      TOKEN_TYPES.forEach(function (t, j) {
+        whPerMTok[t] = isSet(wOver[t]) ? base.whPerMTok[t] : drawFromRange(PARAMS.whPerMTok[t], zWh[j]);
+      });
+      var tokens = custom ? base.tokensByType : splitTokens(
+        tokenRange ? drawFromRange(tokenRange, zTokens) : base.totalTokens,
+        drawMix ? blendMix(w) : base.mix,
+        base.shareUsed);
+      var pue = isSet(inputs.pue) ? base.pue : drawFromRange(PARAMS.pue, zPue);
+      var grid = isSet(inputs.gridIntensity) ? base.gridIntensity : drawFromRange(PARAMS.gridIntensity, zGrid);
+
+      var k = dataCentreKWh(serverEnergyWh(tokens, whPerMTok, base.modelMultiplier), pue);
+      kwh[i] = k;
+      kg[i] = emissionsKg(k, grid) + (base.includeEmbodied ? embodiedKg(k, base.embodiedGPerKWh) : 0);
+    }
+    return { n: n, seed: seed, kWh: summarise(kwh), kgCO2e: summarise(kg) };
+  }
+
   /* ---------- rounding for display ---------- */
 
   // Round to a number of significant figures (default 2).
@@ -513,6 +648,15 @@
     planScenario: planScenario,
     comparisons: comparisons,
     sensitivity: sensitivity,
+    SIM_SAMPLES: SIM_SAMPLES,
+    SIM_SEED: SIM_SEED,
+    SIM_PERCENTILES: SIM_PERCENTILES,
+    seededRandom: seededRandom,
+    standardNormal: standardNormal,
+    drawFromRange: drawFromRange,
+    blendMix: blendMix,
+    quantile: quantile,
+    simulate: simulate,
     roundSig: roundSig,
     formatSig: formatSig
   };

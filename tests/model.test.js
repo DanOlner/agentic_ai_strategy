@@ -504,6 +504,126 @@ test('loading model.js in a fake browser global defines window.CarbonModel', () 
   assert.equal(sandbox.module, undefined);
 });
 
+// ---------- 17. uncertainty intervals (Monte Carlo, PLAN.md section 9) ----------
+
+const QS = ['p2_5', 'p5', 'p50', 'p95', 'p97_5'];
+const Z90 = 1.6448536269514722;
+
+test('seededRandom is repeatable, in [0, 1) and roughly uniform', () => {
+  const a = M.seededRandom(42);
+  const b = M.seededRandom(42);
+  const xs = Array.from({ length: 2000 }, () => a());
+  assert.deepEqual(xs.slice(0, 5), Array.from({ length: 5 }, () => b()));
+  assert.notEqual(xs[0], M.seededRandom(43)());
+  for (const x of xs) assert.ok(x >= 0 && x < 1, x);
+  closeAbs(xs.reduce((s, x) => s + x, 0) / xs.length, 0.5, 0.03);
+});
+
+test('standardNormal has mean 0, sd 1 and 5% below -1.645', () => {
+  const r = M.seededRandom(7);
+  const xs = Array.from({ length: 20000 }, () => M.standardNormal(r));
+  const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
+  const sd = Math.sqrt(xs.reduce((s, x) => s + (x - mean) ** 2, 0) / xs.length);
+  closeAbs(mean, 0, 0.03);
+  closeAbs(sd, 1, 0.03);
+  closeAbs(xs.filter((x) => x < -Z90).length / xs.length, 0.05, 0.006);
+});
+
+test('drawFromRange: central at z = 0, low and high at the 5th and 95th percentiles', () => {
+  const r = { low: 1, central: 20, high: 100 };
+  close(M.drawFromRange(r, 0), 20);
+  close(M.drawFromRange(r, -Z90), 1);
+  close(M.drawFromRange(r, Z90), 100);
+  close(M.drawFromRange(r, -Z90 / 2), Math.sqrt(20)); // halfway in log terms
+  assert.ok(M.drawFromRange(r, -3) < 1 && M.drawFromRange(r, 3) > 100, 'the tails go beyond low and high');
+  close(M.drawFromRange({ low: 5, central: 5, high: 5 }, 2), 5);
+  assert.equal(M.drawFromRange({ low: 0, central: 1, high: 2 }, -3), 0, 'linear fallback, never negative');
+});
+
+test('blendMix gives the low, central and high mixes at -1, 0 and 1, and valid mixes between', () => {
+  for (const [w, lvl] of [[-1, 'low'], [0, 'central'], [1, 'high']]) {
+    const m = M.blendMix(w);
+    for (const t of M.TOKEN_TYPES) close(m[t], M.PARAMS.mix[lvl][t], 1e-12, lvl + ' ' + t);
+  }
+  for (const w of [-0.7, -0.2, 0.3, 0.9]) assert.ok(M.validateMix(M.blendMix(w)), String(w));
+});
+
+test('quantile interpolates between ranks', () => {
+  const s = [1, 2, 3, 4, 5];
+  close(M.quantile(s, 0), 1);
+  close(M.quantile(s, 25), 2);
+  close(M.quantile(s, 50), 3);
+  close(M.quantile(s, 100), 5);
+  close(M.quantile([10, 20], 50), 15);
+  assert.ok(Number.isNaN(M.quantile([], 50)));
+});
+
+test('simulate: repeatable, ordered, and inside the all-low to all-high extremes for every plan', () => {
+  for (const plan of ['pro', 'max', 'ultra']) {
+    const s = M.simulate({ planId: plan });
+    assert.deepEqual(s, M.simulate({ planId: plan }), plan + ': same seed, same result');
+    assert.equal(s.n, M.SIM_SAMPLES);
+    const r = M.planScenario(plan);
+    for (const [k, rk] of [['kWh', 'kWh'], ['kgCO2e', 'totalKgCO2e']]) {
+      const q = s[k];
+      for (let i = 1; i < QS.length; i++) assert.ok(q[QS[i - 1]] <= q[QS[i]], `${plan} ${k} ${QS[i]}`);
+      assert.ok(q.p2_5 > r.low[rk] && q.p97_5 < r.high[rk], `${plan} ${k}: 95% interval inside the extremes`);
+      assert.ok(q.p50 > r.central[rk] / 2 && q.p50 < r.central[rk] * 2, `${plan} ${k}: median near central`);
+    }
+  }
+});
+
+test('simulate: a full Max week (the values quoted in PLAN.md section 9)', () => {
+  const s = M.simulate({ planId: 'max' });
+  const r2 = (x) => M.roundSig(x, 2);
+  assert.deepEqual(QS.map((q) => r2(s.kWh[q])), [9.3, 12, 44, 150, 190]);
+  assert.deepEqual(QS.map((q) => r2(s.kgCO2e[q])), [1.7, 2.4, 12, 48, 63]);
+});
+
+test('simulate: another seed changes the draws but not the picture', () => {
+  const a = M.simulate({ planId: 'max' }, { seed: 1 });
+  const b = M.simulate({ planId: 'max' }, { seed: 2 });
+  assert.notDeepEqual(a, b);
+  for (const q of ['p5', 'p50', 'p95']) close(b.kWh[q], a.kWh[q], 0.1, q);
+});
+
+test('simulate: the share used scales every percentile exactly, and 0% gives zero', () => {
+  const full = M.simulate({ planId: 'max' });
+  const half = M.simulate({ planId: 'max', shareUsed: 0.5 });
+  for (const q of QS) {
+    close(half.kWh[q], full.kWh[q] / 2, 1e-9, q);
+    close(half.kgCO2e[q], full.kgCO2e[q] / 2, 1e-9, q);
+  }
+  for (const v of Object.values(M.simulate({ planId: 'max', shareUsed: 0 }).kWh)) assert.equal(v, 0);
+});
+
+test('simulate: values you set are held fixed', () => {
+  const inputs = { tokensByType: { input: 1e6, cacheWrite: 1e6, cacheRead: 1e6, output: 1e6 },
+    whPerMTok: { ...centralWh }, pue: 1.2, gridIntensity: 300 };
+  const s = M.simulate(inputs);
+  const e = M.estimate(inputs);
+  for (const q of QS) {
+    close(s.kWh[q], e.kWh, 1e-12, q);
+    close(s.kgCO2e[q], e.totalKgCO2e, 1e-12, q);
+  }
+  // Setting only the grid narrows the emissions interval and leaves electricity alone.
+  const d = M.simulate({ planId: 'max' });
+  const g = M.simulate({ planId: 'max', gridIntensity: 350 });
+  assert.deepEqual(g.kWh, d.kWh);
+  assert.ok(g.kgCO2e.p95 / g.kgCO2e.p5 < d.kgCO2e.p95 / d.kgCO2e.p5);
+});
+
+test('simulate: embodied emissions add 42 g per kWh to every sample', () => {
+  const s = M.simulate({ planId: 'max', gridIntensity: 0, includeEmbodied: true });
+  for (const q of QS) close(s.kgCO2e[q], s.kWh[q] * 0.042, 1e-9, q);
+});
+
+test('comparisons: miles in an average electric car (DESNZ 2026, 0.32763 kWh a mile)', () => {
+  close(M.COMPARISONS.evKWhPerMile, 0.32763);
+  close(M.comparisons(35.6227, 12.468).evMiles, 35.6227 / 0.32763);
+  close(M.comparisons(1, 0).evMiles, 3.0522, 1e-4);
+});
+
 test('every exported function is covered by name in this test file', () => {
   const src = fs.readFileSync(__filename, 'utf8');
   for (const [name, value] of Object.entries(M)) {

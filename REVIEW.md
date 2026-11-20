@@ -214,7 +214,7 @@ These are listed as open, each with the reason it was left.
 8. **Climate Brink's "eGRID 2024" 341 g/kWh** can't be traced to an EPA edition. It is quoted, not used.
 9. **The IEA has newer publications** ("Key Questions on Energy and AI", April 2026; World Energy Outlook 2026, 19 November 2026), which may update the 415 TWh baseline. Not checked, because the figure is context only.
 10. **Carried over from PLAN.md section 7, unchanged:**
-    - the bounds are not probabilities (a Monte Carlo option is still a future idea);
+    - the bounds are not probabilities (a Monte Carlo option is still a future idea; added after this review, see PLAN.md section 9);
     - inference location is unknown;
     - training, networking and water are excluded;
     - the model multipliers don't change the plan token counts.
