@@ -356,3 +356,26 @@ Open questions for later work:
 - Should the page also take a ccusage export (JSON) so that users can paste their own token counts by type? This is probably the best way to replace plan presets with real data.
 - Should "full use" assume the 5-hour limits bind before the weekly one on Pro and Max? (The model only uses weekly totals.)
 - Update the Max preset when Wokey publishes Max figures (it needs five accounts; four so far).
+
+## 8. Build notes: where the build departs from this plan
+
+Added on 20 November 2026, when the page was built. The model, the parameter values and every expected value in sections 3 and 4 are unchanged. These are the differences in detail:
+
+1. **"What drives the range" is sorted by the spread in kg CO2e**, largest first. Section 4b lists the rows in roughly kWh order, but grid intensity changes only the emissions, so a kWh order can't place it. Sorted by kg CO2e, grid comes third (3.35 to 14.8 kg), after cache-read energy and weekly tokens. The page shows the rows as range bars on a common kg CO2e scale, with a tick for the central estimate.
+2. **The token mix control has a "range" option as its default.** Section 5a says "central (default)". On the page, the default uses the low-energy, central and high-energy mixes for the low, central and high results, as for every other parameter. Choosing one named mix, or entering custom shares, is an override that applies at all three levels, following the override rule in section 5a. The PUE and grid controls work the same way: "Range (default)", then the named presets, then a custom value.
+3. **An energy-per-token box counts as overridden only when its value differs from the central value.** Typing the central value back in restores the range.
+4. **Invalid entries are ignored, with a message.** Examples are a negative count, a custom PUE below 1, or custom mix shares that don't add up to 100%. The page lists them and uses the default range for that parameter until the entry is fixed.
+5. **Custom token counts are entered in millions.** The boxes start at a central full week of Max (930M split by the central mix). The "fill from total + mix" helper takes a total in millions.
+6. **There is one more comparison: median Gemini text prompts** (0.24 Wh each, S4). Section 4c lists it as a conversion factor, but section 5b leaves it out.
+7. **When embodied emissions are switched on,** the headline kg CO2e, the car-mile comparison and the drivers table all use the total (operational plus embodied). The detail table shows both parts separately.
+8. **`model.js` exports a few extras** beyond section 6:
+   - `mixFromTokens` (the shares implied by custom counts);
+   - `resolveInputs` (the concrete values used at one level);
+   - `roundSig` and `formatSig` (rounding to significant figures for display);
+   - the data constants `TOKEN_TYPE_LABELS`, `LEVELS`, `MODELS`, `MIX_LABELS`, `DEFAULT_PLAN`, `PUE_PRESETS`, `GRID_PRESETS`, `SENSITIVITY_PARAMS` and `RESEARCH_DATE`.
+
+   `estimate` also returns `totalTokens`, `mix`, `totalKgCO2e`, `perMTok` and the `params` used. `estimate(inputs, level)` takes an optional level (default central), so `estimateRange` is three calls to it.
+9. **The tests are in two files plus an entry point.** `tests/model.test.js` covers section 6. `tests/page.test.js` checks the page's ids, links and scripts, checks that the static fallback figures match what `app.js` renders, and drives the controls through a minimal fake DOM. `tests/index.js` exists because Node 26 treats `node --test tests/` as "load the module `tests/`" rather than "search this folder", so the entry point loads each `*.test.js` file.
+10. **Test tolerance for `perMillionTokens`.** Section 3c gives values rounded to three decimal places, and the low g CO2e (0.35554) differs from 0.356 by slightly more than a relative 1e-3. That test uses an absolute tolerance of half a unit in the third decimal place instead.
+11. **The sources and assumptions are static HTML,** so that they show without JavaScript. The sources list was generated from `SOURCES` in `model.js`, and a test checks that every source URL appears on the page.
+12. **The footer doesn't link to the repository,** because no remote is configured yet. It names `PLAN.md` and the `docs/` folder instead. Add the link once the repository is on GitHub.
