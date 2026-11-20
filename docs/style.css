@@ -145,7 +145,7 @@ input[type="number"], select {
 }
 select { width: 100%; max-width: 34rem; }
 input[type="number"] { width: 100%; }
-input[type="range"] { width: 100%; max-width: 34rem; accent-color: var(--accent); }
+input[type="range"] { width: 100%; max-width: 34rem; margin: 0.25rem 0; accent-color: var(--accent); } /* no side margin: the default 2px each side overflowed at 320px */
 input[aria-invalid="true"] { border-color: var(--error); outline: 2px solid var(--error); }
 input.overridden { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 
@@ -208,7 +208,9 @@ button:hover { border-color: var(--accent); }
 .in-words { margin: 0.9rem 0 0; }
 
 /* Tables */
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* position: relative keeps the absolutely positioned .visually-hidden captions inside the scroll box;
+ * without it they sat outside it and widened the whole page on 320px phones. */
+.table-wrap { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
 th, td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--grid); vertical-align: top; }
 thead th { border-bottom: 1px solid var(--border); color: var(--text-2); font-weight: 600; text-align: right; white-space: nowrap; }

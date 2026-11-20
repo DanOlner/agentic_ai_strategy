@@ -78,8 +78,9 @@ test('PLANS have the three presets with current and former names', () => {
 test('COMPARISONS factors', () => {
   assert.equal(M.COMPARISONS.kettleKWh, 0.11);
   close(M.COMPARISONS.ukHomeKWhPerDay, 2500 / 365);
-  close(M.COMPARISONS.petrolCarKgPerMile, 0.16272 * 1.609344);
-  assert.equal(M.COMPARISONS.ukGridKgPerKWh, 0.177);
+  // DESNZ 2026 (S21): average petrol car 0.16152 kg CO2e per km; UK electricity generated 0.13096 kg per kWh.
+  close(M.COMPARISONS.petrolCarKgPerMile, 0.16152 * 1.609344);
+  assert.equal(M.COMPARISONS.ukGridKgPerKWh, 0.13096);
   assert.equal(M.COMPARISONS.geminiPromptWh, 0.24);
 });
 
@@ -100,7 +101,7 @@ test('PUE and grid presets point at known sources and include the PLAN values', 
   const ids = new Set(M.SOURCES.map((s) => s.id));
   for (const p of [...M.PUE_PRESETS, ...M.GRID_PRESETS]) assert.ok(ids.has(p.source), p.id);
   assert.deepEqual(M.PUE_PRESETS.map((p) => p.value), [1.09, 1.14, 1.54]);
-  assert.deepEqual(M.GRID_PRESETS.map((p) => p.value), [94, 177, 195, 287, 297.6, 350, 416]);
+  assert.deepEqual(M.GRID_PRESETS.map((p) => p.value), [94, 131, 195, 287, 297.6, 350, 416]);
 });
 
 // ---------- 2. splitTokens ----------
@@ -364,8 +365,8 @@ test('comparisons(35.6227, 12.4680)', () => {
   const c = M.comparisons(35.6227, 12.4680);
   close(c.kettleBoils, 323.8, 1e-3);
   close(c.homeDays, 5.201, 1e-3);
-  close(c.carMiles, 47.61, 1e-3);
-  close(c.ukGridKg, 6.305, 1e-3);
+  close(c.carMiles, 47.965, 1e-3);
+  close(c.ukGridKg, 4.6651, 1e-3);
   close(c.geminiPrompts, 35622.7 / 0.24, 1e-6);
   const z = M.comparisons(0, 0);
   for (const v of Object.values(z)) assert.equal(v, 0);
@@ -379,7 +380,7 @@ test('comparisons for the scenario table in PLAN.md section 4c', () => {
   closeAbs(lo.kettleBoils, 21, 0.5);
   closeAbs(hi.kettleBoils, 3872, 0.5);
   closeAbs(hi.homeDays, 62, 0.5);
-  closeAbs(hi.carMiles, 677, 0.5);
+  closeAbs(hi.carMiles, 681.7, 0.5);
 });
 
 // ---------- 16. sensitivity ----------

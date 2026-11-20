@@ -286,9 +286,9 @@ test('overrides: PUE, grid, energy per token and mix collapse the range and are 
   assert.match(el['overrides'].textContent, /PUE \(1\)/);
 
   el['pue-select'].value = 'range';
-  el['grid-select'].value = '177';
+  el['grid-select'].value = '131';
   page.change();
-  assert.equal(el['hl-kg'].textContent, M.formatSig(35.6227 * 0.177));
+  assert.equal(el['hl-kg'].textContent, M.formatSig(35.6227 * 0.131));
   assert.match(el['overrides'].textContent, /grid intensity/);
 
   el['grid-select'].value = 'range';
