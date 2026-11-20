@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code energy and carbon estimator</title>
+<meta name="description" content="Estimate the data-centre electricity (kWh) and emissions (kg CO2e) behind a week of Claude Code use, with low, central and high values and every source cited.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#results">Skip to results</a>
+
+<header class="page-header">
+  <h1>How much electricity and carbon is behind a week of Claude Code?</h1>
+  <p class="lede">This page estimates the data-centre electricity (kWh) and greenhouse gas emissions (kg CO2e) behind Claude Code use. You can start from a full week of a subscription plan or from your own token counts. By default it shows a full week of the <strong>Max plan (formerly Max 5x)</strong> used to its limit. Every result is a range: a <em>low</em>, a <em>central</em> best guess and a <em>high</em> value.</p>
+
+  <aside class="notice" aria-labelledby="notice-title">
+    <h2 id="notice-title"><span aria-hidden="true">&#9888;&#xFE0E;</span> How uncertain this is</h2>
+    <ul>
+      <li><strong>Nobody outside Anthropic knows how much energy a Claude token takes.</strong> Anthropic publishes no energy figures per token, prompt or plan, so every figure here is inferred from other companies’ disclosures, independent estimates for other models, or Anthropic’s API price ratios.</li>
+      <li><strong>Nobody outside Anthropic knows how many tokens a plan allows.</strong> Limits are published only as multiples of Pro. The token counts come from two commercial sites’ measurements, one of them a single user.</li>
+      <li><strong>Low and high are bounds, not a confidence interval.</strong> “Low” sets every parameter to its low value at once, and “high” sets every one high, so the spread is very wide (about 190 times for a week of Max). The central value could easily be wrong by a factor of 3 either way.</li>
+      <li><strong>The biggest unknown is the energy cost of a cache read.</strong> About 96% of Claude Code tokens are cache reads, and the evidence on their cost is a price ratio, not a measurement.</li>
+    </ul>
+  </aside>
+</header>
+
+<main>
+<section aria-labelledby="inputs-title" class="panel">
+  <h2 id="inputs-title">What to estimate</h2>
+  <noscript><p class="noscript">The controls need JavaScript. Without it, the page shows the default figures for a full week of the Max plan.</p></noscript>
+
+  <form id="controls" class="controls" autocomplete="off" onsubmit="return false">
+    <fieldset class="field">
+      <legend>Plan or token counts</legend>
+      <div class="choices">
+        <label class="choice"><input type="radio" name="plan" id="plan-pro" value="pro"> Pro <span class="muted">($20 a month)</span></label>
+        <label class="choice"><input type="radio" name="plan" id="plan-max" value="max" checked> Max <span class="muted">(formerly Max 5x, $100)</span></label>
+        <label class="choice"><input type="radio" name="plan" id="plan-ultra" value="ultra"> Ultra <span class="muted">(formerly Max 20x, $200)</span></label>
+        <label class="choice"><input type="radio" name="plan" id="plan-custom" value="custom"> My own token counts</label>
+      </div>
+      <p class="hint">Anthropic renamed its plans on 30 October 2026: Max 5x is now Max and Max 20x is now Ultra. Ultra’s weekly allowance is 10 times Pro’s, not 20.</p>
+    </fieldset>
+
+    <fieldset class="field" id="custom-tokens" hidden>
+      <legend>Your token counts, in millions</legend>
+      <p class="hint">Tools such as ccusage report these four types. The boxes start at a central full week of Max.</p>
+      <div class="grid-4">
+        <label for="tok-input">Fresh input <input type="number" id="tok-input" min="0" step="any" inputmode="decimal"></label>
+        <label for="tok-cacheWrite">Cache write <input type="number" id="tok-cacheWrite" min="0" step="any" inputmode="decimal"></label>
+        <label for="tok-cacheRead">Cache read <input type="number" id="tok-cacheRead" min="0" step="any" inputmode="decimal"></label>
+        <label for="tok-output">Output <input type="number" id="tok-output" min="0" step="any" inputmode="decimal"></label>
+      </div>
+      <p class="hint">Total: <output id="custom-total" for="tok-input tok-cacheWrite tok-cacheRead tok-output">930</output> million tokens.</p>
+      <div class="fill-helper">
+        <label for="fill-total">Fill from a total (millions) <input type="number" id="fill-total" min="0" step="any" inputmode="decimal" value="930"></label>
+        <label for="fill-mix">split by <select id="fill-mix">
+          <option value="low">low-energy mix</option>
+          <option value="central" selected>central mix</option>
+          <option value="high">high-energy mix</option>
+        </select></label>
+        <button type="button" id="fill-button">Fill the boxes</button>
+      </div>
+    </fieldset>
+
+    <div class="field" id="share-group">
+      <label for="share-used">Share of the plan’s weekly limit used: <output id="share-used-value" for="share-used">100%</output></label>
+      <input type="range" id="share-used" min="0" max="100" step="1" value="100">
+      <p class="hint">100% is a ceiling for heavy users who hit the weekly limit every week. Most subscribers use less.</p>
+    </div>
+
+    <div class="field" id="mix-group">
+      <label for="mix-select">Token mix</label>
+      <select id="mix-select">
+        <option value="range" selected>Range: low-energy, central and high-energy mixes (default)</option>
+        <option value="low">Low-energy mix only (97% cache reads)</option>
+        <option value="central">Central mix only (96% cache reads)</option>
+        <option value="high">High-energy mix only (90% cache reads)</option>
+        <option value="custom">My own shares</option>
+      </select>
+      <div id="mix-custom" class="grid-4" hidden>
+        <label for="mix-input">Fresh input % <input type="number" id="mix-input" min="0" max="100" step="any" inputmode="decimal"></label>
+        <label for="mix-cacheWrite">Cache write % <input type="number" id="mix-cacheWrite" min="0" max="100" step="any" inputmode="decimal"></label>
+        <label for="mix-cacheRead">Cache read % <input type="number" id="mix-cacheRead" min="0" max="100" step="any" inputmode="decimal"></label>
+        <label for="mix-output">Output % <input type="number" id="mix-output" min="0" max="100" step="any" inputmode="decimal"></label>
+      </div>
+      <p class="hint" id="mix-sum" hidden></p>
+    </div>
+
+    <div class="field">
+      <label for="model-select">Model size</label>
+      <select id="model-select">
+        <option value="opus" selected>Opus (default, 1.0×)</option>
+        <option value="sonnet">Sonnet (0.5×)</option>
+        <option value="haiku">Haiku (0.15×)</option>
+      </select>
+      <p class="hint">Relative energy per token, from claude-carbon’s ratios (S8). The plan presets assume mostly Opus use.</p>
+    </div>
+
+    <details class="field advanced" id="advanced">
+      <summary>Advanced: energy per token, PUE, grid and embodied emissions</summary>
+
+      <fieldset class="subfield">
+        <legend>Server energy, Wh per million tokens (Opus-class)</legend>
+        <p class="hint">Pre-filled with the central value. Change a box to use your own value at every level.</p>
+        <div class="grid-4">
+          <label for="wh-input">Fresh input <input type="number" id="wh-input" min="0" step="any" inputmode="decimal" value="200"><span class="hint" id="hint-wh-input">low 50, high 400</span></label>
+          <label for="wh-cacheWrite">Cache write <input type="number" id="wh-cacheWrite" min="0" step="any" inputmode="decimal" value="250"><span class="hint" id="hint-wh-cacheWrite">low 50, high 800</span></label>
+          <label for="wh-cacheRead">Cache read <input type="number" id="wh-cacheRead" min="0" step="any" inputmode="decimal" value="20"><span class="hint" id="hint-wh-cacheRead">low 1, high 100</span></label>
+          <label for="wh-output">Output <input type="number" id="wh-output" min="0" step="any" inputmode="decimal" value="1000"><span class="hint" id="hint-wh-output">low 300, high 3,000</span></label>
+        </div>
+      </fieldset>
+
+      <div class="subfield">
+        <label for="pue-select">Data-centre overhead (PUE)</label>
+        <select id="pue-select">
+          <option value="range" selected>Range: 1.09, 1.14, 1.54 (default)</option>
+          <option value="1.09">Google fleet 2025: 1.09</option>
+          <option value="1.14">AWS global 2025: 1.14</option>
+          <option value="1.54">Industry average (Uptime 2025): 1.54</option>
+          <option value="custom">Custom</option>
+        </select>
+        <label for="pue-custom" class="inline-custom" id="pue-custom-label" hidden>Your PUE <input type="number" id="pue-custom" min="1" step="0.01" inputmode="decimal" value="1.2"></label>
+      </div>
+
+      <div class="subfield">
+        <label for="grid-select">Grid carbon intensity (g CO2e per kWh)</label>
+        <select id="grid-select">
+          <option value="range" selected>Range: 94, 350, 416 (default)</option>
+          <option value="94">Google 2024, market-based: 94</option>
+          <option value="177">UK grid 2025: 177</option>
+          <option value="195">California (eGRID CAMX): 195</option>
+          <option value="287">AWS factor used by Jegham et al.: 287</option>
+          <option value="297.6">AWS us-west-2 (Luccioni et al.): 297.6</option>
+          <option value="350">US average, location-based (eGRID2023): 350</option>
+          <option value="416">RFC West / Indiana (eGRID): 416</option>
+          <option value="custom">Custom</option>
+        </select>
+        <label for="grid-custom" class="inline-custom" id="grid-custom-label" hidden>Your grid intensity <input type="number" id="grid-custom" min="0" step="any" inputmode="decimal" value="200"></label>
+      </div>
+
+      <div class="subfield">
+        <label class="choice" for="embodied-toggle"><input type="checkbox" id="embodied-toggle"> Include embodied hardware emissions (42 g CO2e per kWh, derived from Google, S4)</label>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button type="button" id="reset-button">Reset to defaults</button>
+    </div>
+    <div id="form-errors" class="errors" role="alert" hidden></div>
+    <p id="overrides" class="overrides" aria-live="polite">Using the default ranges for every parameter.</p>
+  </form>
+</section>
+
+<section id="results" aria-labelledby="results-title" class="panel results">
+  <h2 id="results-title">Results</h2>
+  <p id="hl-context" class="context">A full week of Max (formerly Max 5x), with 100% of the weekly limit used, Opus-class model.</p>
+
+  <div class="headline" aria-live="polite">
+    <div class="stat">
+      <p class="stat-label" id="hl-kwh-label">Electricity a week</p>
+      <p class="stat-value"><span id="hl-kwh">36</span> <span class="unit">kWh</span></p>
+      <p class="stat-range">range <span id="hl-kwh-range">2.3 – 430</span></p>
+    </div>
+    <div class="stat">
+      <p class="stat-label" id="hl-kg-label">Emissions a week</p>
+      <p class="stat-value"><span id="hl-kg">12</span> <span class="unit">kg CO2e</span></p>
+      <p class="stat-range">range <span id="hl-kg-range">0.21 – 180</span></p>
+    </div>
+  </div>
+  <p id="hl-words" class="in-words">About 36 kWh is roughly 5.2 days of a typical GB home’s electricity, or 320 one-litre kettle boils. About 12 kg CO2e is like driving an average petrol car 48 miles.</p>
+
+  <h3>Low, central and high</h3>
+  <div class="table-wrap">
+    <table class="num-table">
+      <caption class="visually-hidden">Low, central and high estimates</caption>
+      <thead><tr><th scope="col">Quantity</th><th scope="col">Low</th><th scope="col">Central</th><th scope="col">High</th></tr></thead>
+      <tbody id="detail-body">
+        <tr><th scope="row">Tokens</th><td>600 million</td><td>930 million</td><td>1.5 billion</td></tr>
+        <tr><th scope="row">Server energy (kWh)</th><td>2.08</td><td>31.2</td><td>277</td></tr>
+        <tr><th scope="row">Data-centre electricity, after PUE (kWh)</th><td>2.27</td><td>35.6</td><td>426</td></tr>
+        <tr><th scope="row">Operational emissions (kg CO2e)</th><td>0.213</td><td>12.5</td><td>177</td></tr>
+        <tr><th scope="row">PUE used</th><td>1.09</td><td>1.14</td><td>1.54</td></tr>
+        <tr><th scope="row">Grid intensity used (g CO2e/kWh)</th><td>94</td><td>350</td><td>416</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Per million tokens</h3>
+  <p class="hint">Data-centre energy (after PUE and the model-size multiplier) for each token type, and for the blended mix.</p>
+  <div class="table-wrap">
+    <table class="num-table">
+      <caption class="visually-hidden">Energy and emissions per million tokens</caption>
+      <thead><tr><th scope="col">Per million tokens</th><th scope="col">Low</th><th scope="col">Central</th><th scope="col">High</th></tr></thead>
+      <tbody id="permtok-body">
+        <tr><th scope="row">Blended mix (Wh)</th><td>3.78</td><td>38.3</td><td>284</td></tr>
+        <tr><th scope="row">Blended mix (g CO2e)</th><td>0.356</td><td>13.4</td><td>118</td></tr>
+        <tr><th scope="row">Fresh input (Wh)</th><td>54.5</td><td>228</td><td>616</td></tr>
+        <tr><th scope="row">Cache write (Wh)</th><td>54.5</td><td>285</td><td>1,230</td></tr>
+        <tr><th scope="row">Cache read (Wh)</th><td>1.09</td><td>22.8</td><td>154</td></tr>
+        <tr><th scope="row">Output (Wh)</th><td>327</td><td>1,140</td><td>4,620</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where the energy goes (central estimate)</h3>
+  <p id="breakdown-note" class="hint">Cache reads are 96% of tokens and 57% of the energy.</p>
+  <div class="table-wrap">
+    <table class="num-table bar-table">
+      <caption class="visually-hidden">Central electricity by token type</caption>
+      <thead><tr><th scope="col">Token type</th><th scope="col">Share of tokens</th><th scope="col">kWh</th><th scope="col">Share of energy</th><th scope="col" class="bar-col"><span class="visually-hidden">Bar</span></th></tr></thead>
+      <tbody id="breakdown-body">
+        <tr class="highlight"><th scope="row">Cache read</th><td>96%</td><td>20.4</td><td>57%</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Cache write</th><td>3.2%</td><td>8.48</td><td>24%</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Output</th><td>0.6%</td><td>6.36</td><td>18%</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Fresh input</th><td>0.2%</td><td>0.424</td><td>1.2%</td><td class="bar-col"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>In everyday terms</h3>
+  <div class="table-wrap">
+    <table class="num-table">
+      <caption class="visually-hidden">Comparisons for the low, central and high estimates</caption>
+      <thead><tr><th scope="col">Comparison</th><th scope="col">Low</th><th scope="col">Central</th><th scope="col">High</th></tr></thead>
+      <tbody id="comparisons-body">
+        <tr><th scope="row">One-litre kettle boils (0.11 kWh each)</th><td>21</td><td>320</td><td>3,900</td></tr>
+        <tr><th scope="row">Days of a typical GB home’s electricity (6.85 kWh a day)</th><td>0.33</td><td>5.2</td><td>62</td></tr>
+        <tr><th scope="row">Miles in an average petrol car (0.262 kg CO2e a mile)</th><td>0.81</td><td>48</td><td>680</td></tr>
+        <tr><th scope="row">The same electricity on the UK grid (kg CO2e at 177 g/kWh)</th><td>0.4</td><td>6.3</td><td>75</td></tr>
+        <tr><th scope="row">Median Gemini text prompts (0.24 Wh each)</th><td>9,500</td><td>150,000</td><td>1,800,000</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What drives the range</h3>
+  <p class="hint">Each row starts from the central estimate and moves <em>one</em> parameter to its low and high value, leaving the rest central. Bars show the spread in kg CO2e on a common scale; the dark tick is the central estimate. Parameters you have set yourself show no spread.</p>
+  <div class="table-wrap">
+    <table class="num-table bar-table">
+      <caption class="visually-hidden">One-at-a-time sensitivity of the central estimate</caption>
+      <thead><tr><th scope="col">Parameter</th><th scope="col">kWh (low – high)</th><th scope="col">kg CO2e (low – high)</th><th scope="col" class="bar-col"><span class="visually-hidden">Range bar</span></th></tr></thead>
+      <tbody id="drivers-body">
+        <tr><th scope="row">Cache-read energy</th><td>16.3 – 117</td><td>5.7 – 41</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Weekly tokens</th><td>23 – 57.5</td><td>8.04 – 20.1</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Grid intensity</th><td>35.6 – 35.6</td><td>3.35 – 14.8</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Cache-write energy</th><td>28.8 – 54.3</td><td>10.1 – 19</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Token mix</th><td>31.6 – 51.5</td><td>11.1 – 18</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Output energy</th><td>31.2 – 48.3</td><td>10.9 – 16.9</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">PUE (data-centre overhead)</th><td>34.1 – 48.1</td><td>11.9 – 16.8</td><td class="bar-col"></td></tr>
+        <tr><th scope="row">Fresh-input energy</th><td>35.3 – 36</td><td>12.4 – 12.6</td><td class="bar-col"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="method-title" class="panel prose">
+  <h2 id="method-title">How this works</h2>
+  <ol>
+    <li><strong>Count the tokens by type.</strong> For a plan, take the estimated tokens in a full week, multiply by the share of the plan you use, and split them into fresh input, cache writes, cache reads and output using the token mix. If you enter your own counts, they are used as they are.</li>
+    <li><strong>Server energy.</strong> Multiply the tokens of each type (in millions) by the energy per million tokens of that type, then by the model-size multiplier, and add them up. This is the energy of the servers: accelerators, host CPUs and memory, and a share of idle capacity.</li>
+    <li><strong>Data-centre electricity.</strong> Multiply by the PUE (power usage effectiveness) to add cooling and other facility overhead.</li>
+    <li><strong>Emissions.</strong> Multiply the electricity by the grid’s carbon intensity.</li>
+    <li><strong>Embodied emissions</strong> (off by default) add 42 g CO2e per kWh for making the hardware, a ratio derived from Google’s figures (S4).</li>
+  </ol>
+  <p>Claude Code sends the whole conversation back to the model on every turn. Anthropic’s prompt cache keeps the model’s working state for the earlier part, so most tokens on each call are <strong>cache reads</strong>. A cache read skips most of the computation, so it costs much less per token than fresh input, but because there are so many of them they are still the largest share of the energy. Output tokens cost the most per token, because each one needs a full pass through the model.</p>
+  <p><strong>Where the range comes from.</strong> The low result sets every parameter to its low value at once, and the high result sets every one high. These are bounds rather than a statistical interval: it is unlikely that every parameter is at its extreme together. If you set a parameter yourself, the low, central and high results all use your value for it. The “what drives the range” table shows which assumption matters most. For a typical Claude Code mix it is the energy of a cache read.</p>
+  <p><strong>Location-based or market-based carbon?</strong> Location-based emissions use the average carbon intensity of the grid where the electricity is used. Market-based emissions subtract the renewable electricity a company has contracted for. Google’s 2024 figures show the gap: 345 g CO2e/kWh location-based against 94 market-based (S4). Market-based figures show what the company has paid for. Location-based figures are closer to the physical effect of extra demand on today’s grid. The central value here is location-based (the US average, 350), and the market-based figure is the low end.</p>
+  <p><strong>Not included:</strong> training the model (Watershed, S9, puts it at 32% to 56% of a model’s lifetime footprint), networking, your own computer, water use, and embodied emissions unless you switch them on.</p>
+</section>
+
+<section aria-labelledby="assumptions-title" class="panel prose">
+  <h2 id="assumptions-title">Assumptions</h2>
+  <p>Values marked <span class="own">own assumption</span> are judgements made for this page, not published figures. The research and arithmetic behind each one are in <code>PLAN.md</code> in the repository.</p>
+
+  <h3>Energy per million tokens (server level, Opus-class model)</h3>
+  <div class="table-wrap">
+    <table class="num-table">
+      <thead><tr><th scope="col">Token type</th><th scope="col">Low</th><th scope="col">Central</th><th scope="col">High</th><th scope="col" class="text-col">Where it comes from</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Output</th><td>300</td><td>1,000</td><td>3,000</td><td class="text-col">Low: Epoch’s ~600 Wh for GPT-4o on H100 (S3), halved for newer hardware (S1). Central: between Epoch and Couch’s 1,950 (S2). High: Jegham et al. for Claude 3.7 Sonnet (S6). Low and central are an <span class="own">own assumption</span>.</td></tr>
+        <tr><th scope="row">Fresh input</th><td>50</td><td>200</td><td>400</td><td class="text-col">Central: output ÷ 5, Anthropic’s price ratio (S15, as in S2). High: Epoch’s 100k-token prefill (S3) and Couch’s 390 (S2). Low: output-low ÷ 6 (<span class="own">own assumption</span>).</td></tr>
+        <tr><th scope="row">Cache write</th><td>50</td><td>250</td><td>800</td><td class="text-col">Fresh input × 1.0 / 1.25 / 2.0, from Anthropic’s cache-write price ratios (S15) (<span class="own">own assumption</span> that energy tracks price).</td></tr>
+        <tr><th scope="row">Cache read</th><td>1</td><td>20</td><td>100</td><td class="text-col">Fresh input × about 0.02 / 0.1 / 0.25, following Climate Brink’s bounds and central (S1) and Couch (S2). <strong>The weakest parameter and the biggest driver of the result.</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Token mix (share of all tokens)</h3>
+  <div class="table-wrap">
+    <table class="num-table">
+      <thead><tr><th scope="col">Mix</th><th scope="col">Cache read</th><th scope="col">Cache write</th><th scope="col">Fresh input</th><th scope="col">Output</th><th scope="col" class="text-col">Basis</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Low-energy</th><td>97.0%</td><td>2.5%</td><td>0.1%</td><td>0.4%</td><td class="text-col">Climate Brink’s 0.4% output (S1), slightly more cache reads (<span class="own">own assumption</span>)</td></tr>
+        <tr><th scope="row">Central</th><td>96.0%</td><td>3.2%</td><td>0.2%</td><td>0.6%</td><td class="text-col">FinOps LLM’s measured mix (S14), and Climate Brink’s 96% cache reads (S1)</td></tr>
+        <tr><th scope="row">High-energy</th><td>90.0%</td><td>8.4%</td><td>0.8%</td><td>0.8%</td><td class="text-col">Wokey’s Ultra accounts: about 90% cache reads, 0.8% output (S13)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Tokens in a full week of each plan</h3>
+  <div class="table-wrap">
+    <table class="num-table">
+      <thead><tr><th scope="col">Plan</th><th scope="col">Low</th><th scope="col">Central</th><th scope="col">High</th><th scope="col" class="text-col">Basis</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Pro</th><td>70M</td><td>185M</td><td>280M</td><td class="text-col">Central: one-tenth of Ultra (the official ratio, S11, S12), which also matches Wokey’s $163 a week (S13). Low: Wokey’s measured 71.8M, a chat-heavy mix (S13). High: one-tenth of Ultra high.</td></tr>
+        <tr><th scope="row">Max (formerly Max 5x)</th><td>600M</td><td>930M</td><td>1,500M</td><td class="text-col">Central: half of Ultra (5x versus 10x Pro, S11). High: above FinOps LLM’s “at least 1.3B” for Max 5x (S14). Low: 5 × Pro low on a Claude Code mix (<span class="own">own assumption</span>). <strong>The weakest preset:</strong> the two lines of evidence disagree.</td></tr>
+        <tr><th scope="row">Ultra (formerly Max 20x)</th><td>1,500M</td><td>1,850M</td><td>2,800M</td><td class="text-col">Central: Wokey’s 1.78B (S13) and FinOps LLM’s ~1.9B (S14). Low: a less cache-heavy mix. High: the same API-dollar allowance at Opus 5.5’s cheaper cache-read price (S15) (<span class="own">own calculation</span>).</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Other parameters</h3>
+  <div class="table-wrap">
+    <table class="num-table">
+      <thead><tr><th scope="col">Parameter</th><th scope="col">Low</th><th scope="col">Central</th><th scope="col">High</th><th scope="col" class="text-col">Where it comes from</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">PUE</th><td>1.09</td><td>1.14</td><td>1.54</td><td class="text-col">Low: Google fleet 2025 (S16). Central: AWS global 2025 (S17); Claude runs mostly on AWS and Google Cloud (S18). High: the Uptime Institute 2025 industry average, quoted by Google (S16).</td></tr>
+        <tr><th scope="row">Grid (g CO2e/kWh)</th><td>94</td><td>350</td><td>416</td><td class="text-col">Low: Google 2024 market-based (S4). Central: US average, location-based, eGRID2023 (S20). High: eGRID RFC West, which covers most of Indiana, where Anthropic’s Project Rainier campus is (S19, S20; that the site is in RFC West is an <span class="own">own assumption</span>).</td></tr>
+        <tr><th scope="row">Model size</th><td colspan="3">Opus 1.0, Sonnet 0.5, Haiku 0.15</td><td class="text-col">claude-carbon’s energy-per-token ratios (S8), themselves based on prices.</td></tr>
+        <tr><th scope="row">Embodied hardware</th><td colspan="3">42 g CO2e per kWh</td><td class="text-col">Derived from Google: 0.010 g embodied per 0.24 Wh prompt (S4).</td></tr>
+        <tr><th scope="row">Kettle boil</th><td colspan="3">0.11 kWh</td><td class="text-col"><span class="own">Own calculation</span>: 1 litre from 15 °C to 100 °C is 4.186 kJ/kg·K × 85 K = 0.099 kWh, at about 90% efficiency.</td></tr>
+        <tr><th scope="row">GB home</th><td colspan="3">6.85 kWh a day</td><td class="text-col">Ofgem’s 2026 medium typical consumption, 2,500 kWh a year (S22).</td></tr>
+        <tr><th scope="row">Petrol car</th><td colspan="3">0.262 kg CO2e a mile</td><td class="text-col">DESNZ 2025 average petrol car, 0.16272 kg per km (S21).</td></tr>
+        <tr><th scope="row">UK grid</th><td colspan="3">177 g CO2e per kWh</td><td class="text-col">DESNZ 2025, electricity generated (S21).</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The server energy figures follow Google’s breakdown (S4): they include accelerators, host CPU and memory and idle capacity, and exclude facility overhead, which the PUE adds. Epoch’s per-GPU power (S3), which the Couch factors inherit, already includes some overhead, so applying a PUE on top double-counts by a few per cent.</p>
+</section>
+
+<section aria-labelledby="sources-title" class="panel prose">
+  <h2 id="sources-title">Sources</h2>
+  <p>All read on 20 November 2026. The figure used from each is quoted or summarised; anything derived from it is marked “derived”.</p>
+  <ol class="sources" id="sources-list">
+    <li id="source-S1"><span class="src-id">S1</span> Zeke Hausfather, The Climate Brink, <a href="https://www.theclimatebrink.com/p/the-real-energy-use-of-agentic-ai">The real energy use of agentic AI</a>. 5 Aug 2026.<br><span class="figure">Figure used: 3.2 billion tokens of Claude Code use over 8 weeks, about 170 kWh (70 to 330). 96% cache reads, 0.4% output. Cache reads at 10% of input (1% to 25%). Grid 341 gCO2e/kWh.</span></li>
+    <li id="source-S2"><span class="src-id">S2</span> Simon P. Couch, <a href="https://simonpcouch.com/blog/2026-01-20-cc-impact/">Claude Code’s environmental impact</a>. 20 Jan 2026.<br><span class="figure">Figure used: Wh per million tokens: input ~390, output ~1,950, cache read ~39, cache write ~490 (&quot;napkin math&quot;).</span></li>
+    <li id="source-S3"><span class="src-id">S3</span> Josh You, Epoch AI, <a href="https://epoch.ai/gradient-updates/how-much-energy-does-chatgpt-use">How much energy does ChatGPT use?</a>. 7 Feb 2025.<br><span class="figure">Figure used: About 0.3 Wh per GPT-4o query (500 output tokens); 10k input tokens ~2.4 Wh, 100k ~40 Wh. Derived: ~600 Wh per million output tokens.</span></li>
+    <li id="source-S4"><span class="src-id">S4</span> Cooper Elsworth et al., Google, <a href="https://arxiv.org/abs/2508.15734">Measuring the environmental impact of delivering AI at Google Scale (arXiv 2508.15734)</a>. 21 Aug 2025.<br><span class="figure">Figure used: Median Gemini Apps text prompt 0.24 Wh and 0.03 gCO2e. Google 2024 grid: 345 location-based, 94 market-based gCO2e/kWh. Derived: embodied ~42 gCO2e per kWh.</span></li>
+    <li id="source-S5"><span class="src-id">S5</span> Mistral AI, <a href="https://mistral.ai/news/our-contribution-to-a-global-environmental-standard-for-ai">Our contribution to a global environmental standard for AI</a>. 22 Jul 2025.<br><span class="figure">Figure used: 1.14 gCO2e and 45 mL of water for a 400-token Le Chat response (lifecycle). Cross-check only.</span></li>
+    <li id="source-S6"><span class="src-id">S6</span> Nidhal Jegham et al., <a href="https://arxiv.org/abs/2505.09598">How Hungry is AI? Benchmarking Energy, Water, and Carbon Footprint of LLM Inference (arXiv 2505.09598 v6)</a>. 14 May 2025, revised 24 Nov 2025.<br><span class="figure">Figure used: Claude 3.7 Sonnet 0.950 / 2.989 / 5.671 Wh per query at 100/300, 1k/1k, 10k/1.5k tokens. AWS PUE 1.14, 0.287 kgCO2e/kWh. Derived: ~3,000 Wh per million output tokens.</span></li>
+    <li id="source-S7"><span class="src-id">S7</span> Alexandra Sasha Luccioni, Yacine Jernite, Emma Strubell, <a href="https://arxiv.org/abs/2311.16863">Power Hungry Processing: Watts Driving the Cost of AI Deployment? (FAccT ’24)</a>. Nov 2023 (v3 Oct 2024).<br><span class="figure">Figure used: Text generation: about 0.05 kWh per 1,000 queries on small open models. AWS us-west-2 grid 297.6 gCO2e/kWh.</span></li>
+    <li id="source-S8"><span class="src-id">S8</span> metztim (GitHub), <a href="https://github.com/metztim/claude-carbon/blob/main/METHODOLOGY.md">claude-carbon METHODOLOGY.md</a>. v1.2, 18 Dec 2025.<br><span class="figure">Figure used: Haiku 0.3, Sonnet 1.0, Opus 2.0 J per token; cache read 0.1x, cache write 1.25x input; PUE 1.2; grid 384 gCO2e/kWh. Used for the model-size multipliers.</span></li>
+    <li id="source-S9"><span class="src-id">S9</span> John Bistline, Watershed, <a href="https://watershed.com/en-GB/blog/ai-emissions-framework">An open framework for AI emissions measurement</a>. 22 Jul 2026.<br><span class="figure">Figure used: Benchmarks can overstate inference electricity &quot;by 4 to 20 times&quot;; training is 32% to 56% of a model’s footprint. Context only.</span></li>
+    <li id="source-S10"><span class="src-id">S10</span> International Energy Agency, <a href="https://www.iea.org/reports/energy-and-ai">Energy and AI</a>. 10 Apr 2025.<br><span class="figure">Figure used: Data centres used around 415 TWh (about 1.5% of world electricity) in 2024; around 945 TWh by 2030 in the Base Case. Context only.</span></li>
+    <li id="source-S11"><span class="src-id">S11</span> Anthropic, <a href="https://claude.com/pricing">Claude pricing</a>. read 20 Nov 2026.<br><span class="figure">Figure used: Pro $20/month; Max $100, &quot;5x Pro usage every 5 hours and every week&quot;; Ultra $200, &quot;10x Pro usage every week&quot;.</span></li>
+    <li id="source-S12"><span class="src-id">S12</span> Anthropic help centre, <a href="https://support.claude.com/en/articles/17728952">What is the Ultra plan? / Use Claude Code with your Pro, Max, or Ultra plan</a> (<a href="https://support.claude.com/en/articles/11145838-using-claude-code-with-your-pro-or-max-plan">second page</a>). read 20 Nov 2026.<br><span class="figure">Figure used: &quot;The Max 20x plan is now called the Ultra plan.&quot; Ultra includes 10 times Pro’s weekly usage.</span></li>
+    <li id="source-S13"><span class="src-id">S13</span> Wokey, <a href="https://wokey.ai/claude-usage-limits">Claude Usage Limits (November 2026)</a>. data updated 16 Nov 2026.<br><span class="figure">Figure used: Pro about 71.8M tokens a week ($163 at API prices); Ultra about 1.78B tokens a week ($1,576), about 9.7x Pro.</span></li>
+    <li id="source-S14"><span class="src-id">S14</span> FinOps LLM, <a href="https://finopsllm.com/research/claude-pro-max-tokens-limit">How many tokens do you get with Claude Pro and Max? We counted them</a>. 27 Sep 2026, updated 14 Nov 2026.<br><span class="figure">Figure used: Max 20x/Ultra ~1.9B tokens a week (1.8 to 2.3B); Max 5x at least 1.3B. One user’s mix: 96% cache reads, 3.3% cache writes, 0.57% output.</span></li>
+    <li id="source-S15"><span class="src-id">S15</span> Anthropic, <a href="https://platform.claude.com/docs/en/about-claude/pricing">Pricing (Claude API)</a>. read 20 Nov 2026.<br><span class="figure">Figure used: Opus 5.5 per million tokens: input $4, 5-minute cache write $5, 1-hour write $8, cache read $0.20, output $20.</span></li>
+    <li id="source-S16"><span class="src-id">S16</span> Google, <a href="https://datacenters.google/efficiency/">Data centre efficiency</a>. read 20 Nov 2026 (data to Q2 2026).<br><span class="figure">Figure used: Fleet PUE 1.09 in 2025. Quotes Uptime Institute 2025: global average PUE 1.54.</span></li>
+    <li id="source-S17"><span class="src-id">S17</span> Amazon, <a href="https://sustainability.aboutamazon.com/products-services/aws-cloud">AWS Cloud sustainability</a>. read 20 Nov 2026 (2025 report).<br><span class="figure">Figure used: Average global PUE 1.14 in 2025.</span></li>
+    <li id="source-S18"><span class="src-id">S18</span> Anthropic, <a href="https://www.anthropic.com/news/anthropic-amazon-compute">Anthropic and Amazon expand compute partnership / Google and Broadcom partnership</a> (<a href="https://www.anthropic.com/news/google-broadcom-partnership-compute">second page</a>). 20 Apr 2026 and 6 Apr 2026.<br><span class="figure">Figure used: Claude is trained and served on AWS Trainium, Google TPUs and NVIDIA GPUs.</span></li>
+    <li id="source-S19"><span class="src-id">S19</span> Epoch AI, <a href="https://epoch.ai/data/ai-data-centers/directory/anthropic-amazon-new-carlisle">AI data centres directory: Anthropic–Amazon New Carlisle</a>. updated 2 Aug 2026.<br><span class="figure">Figure used: Project Rainier’s main campus is in New Carlisle, Indiana.</span></li>
+    <li id="source-S20"><span class="src-id">S20</span> US Environmental Protection Agency, <a href="https://www.epa.gov/egrid/summary-data">eGRID summary data (eGRID2023)</a>. 15 Jan 2025, rev. 12 Jun 2025.<br><span class="figure">Figure used: US average 349.7, RFC West 415.5, California (CAMX) 195.0 gCO2e/kWh (derived from lb/MWh).</span></li>
+    <li id="source-S21"><span class="src-id">S21</span> UK Department for Energy Security and Net Zero, <a href="https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2025">Greenhouse gas reporting: conversion factors 2025</a>. 10 Jun 2025.<br><span class="figure">Figure used: UK electricity 0.177 kgCO2e/kWh; average petrol car 0.16272 kgCO2e/km.</span></li>
+    <li id="source-S22"><span class="src-id">S22</span> Ofgem, <a href="https://www.ofgem.gov.uk/sites/default/files/2026-05/Review%20of%20typical%20domestic%20consumption%20values%20decision.pdf">Review of typical domestic consumption values: decision</a>. 27 May 2026.<br><span class="figure">Figure used: Typical GB household electricity: medium 2,500 kWh a year.</span></li>
+  </ol>
+</section>
+</main>
+
+<footer class="page-footer">
+  <p>Research done on 20 November 2026. Plan names and prices are as published on that date. The method, the sources and the arithmetic are in <code>PLAN.md</code> in this page’s repository; the code is in its <code>docs/</code> folder.</p>
+</footer>
+
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
