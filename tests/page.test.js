@@ -360,3 +360,21 @@ test('reset to defaults restores the default view', () => {
   assert.equal(el['advanced'].open, false);
   assert.equal(el['overrides'].textContent, 'Using the default ranges for every parameter.');
 });
+
+test('the summary sentence uses "1 day", not "1 days" (found in review: a Pro week is 1.03 days)', () => {
+  const { el } = loadPage();
+  el['plan-max'].checked = false;
+  el['plan-pro'].checked = true;
+  page_change(el);
+  assert.match(el['hl-words'].textContent, /roughly 1 day of a typical GB home/);
+  assert.match(el['hl-words'].textContent, /64 one-litre kettle boils/);
+  // A share that gives 1 mile and 1 kettle boil, singular too.
+  el['share-used'].value = '11';
+  page_change(el);
+  assert.match(el['hl-words'].textContent, /petrol car 1 mile\./);
+  assert.ok(!/(^|[^\d.])1 (days|miles|one-litre kettle boils)\b/.test(el['hl-words'].textContent), el['hl-words'].textContent);
+});
+
+function page_change(el) {
+  (el['controls'].listeners.change || []).forEach((fn) => fn({ type: 'change' }));
+}

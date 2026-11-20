@@ -77,6 +77,12 @@
 
   function fmt3(x) { return fmt(x, 3); }
 
+  // A rounded number with its noun: '1 day' but '0.5 days' and '5.2 days'.
+  function counted(x, singular, plural) {
+    var s = fmt(x);
+    return s + ' ' + (s === '1' ? singular : plural);
+  }
+
   function pct(share) {
     if (share === null || share === undefined || !isFinite(share)) return '–';
     return fmt(share * 100, 2) + '%';
@@ -270,9 +276,9 @@
     el.kgRange.textContent = fmt(range.low.totalKgCO2e) + DASH + fmt(range.high.totalKgCO2e);
 
     var cc = M.comparisons(c.kWh, c.totalKgCO2e);
-    el.words.textContent = 'About ' + fmt(c.kWh) + ' kWh is roughly ' + fmt(cc.homeDays) +
-      ' days of a typical GB home’s electricity, or ' + fmt(cc.kettleBoils) + ' one-litre kettle boils. About ' +
-      fmt(c.totalKgCO2e) + ' kg CO2e is like driving an average petrol car ' + fmt(cc.carMiles) + ' miles.';
+    el.words.textContent = 'About ' + fmt(c.kWh) + ' kWh is roughly ' + counted(cc.homeDays, 'day', 'days') +
+      ' of a typical GB home’s electricity, or ' + counted(cc.kettleBoils, 'one-litre kettle boil', 'one-litre kettle boils') + '. About ' +
+      fmt(c.totalKgCO2e) + ' kg CO2e is like driving an average petrol car ' + counted(cc.carMiles, 'mile', 'miles') + '.';
 
     renderDetail(range, state.inputs.includeEmbodied);
     renderPerMTok(range);
