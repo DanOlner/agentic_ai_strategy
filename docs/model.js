@@ -115,8 +115,42 @@
     petrolCarKgPerMile: 0.16152 * 1.609344, // DESNZ 2026 average petrol car, 0.16152 kg per km (S21)
     ukGridKgPerKWh: 0.13096, // DESNZ 2026 UK electricity generated (2025 data) (S21)
     evKWhPerMile: 0.32763, // DESNZ 2026 average battery electric car: grid kWh a mile, real-world, charging losses included (S21)
+    // Flights, one passenger, with radiative forcing (DESNZ 2026, S21; the 8% routing uplift is already in the factors).
+    flightDomesticKgPerKm: 0.22928, // domestic, to/from UK, average passenger
+    flightLongHaulEconomyKgPerKm: 0.11704, // long-haul, to/from UK, economy
+    lonEdiKm: 534, // own calculation: great-circle distance, Heathrow to Edinburgh
+    lonNycKm: 5540, // own calculation: great-circle distance, Heathrow to New York JFK
     geminiPromptWh: 0.24 // Google median Gemini Apps text prompt (S4)
   };
+
+  // Kilograms for one return flight, one passenger.
+  COMPARISONS.lonEdiReturnKg = 2 * COMPARISONS.lonEdiKm * COMPARISONS.flightDomesticKgPerKm;
+  COMPARISONS.lonNycReturnKg = 2 * COMPARISONS.lonNycKm * COMPARISONS.flightLongHaulEconomyKgPerKm;
+
+  /*
+   * Business electricity prices, per kWh in each currency, excluding VAT
+   * (PLAN.md section 10). Central is the price for the largest consumers,
+   * which is what a large data centre would be; low and high bracket it.
+   */
+  var PRICES = {
+    uk: {
+      label: 'UK', symbol: '£', currency: 'GBP', low: 0.2178, central: 0.2225, high: 0.2442, source: 'S23',
+      basis: 'DESNZ non-domestic prices, Q2 2026. Low: extra-large users (over 150 GWh a year), Climate Change Levy excluded. ' +
+        'Central: extra-large, levy included. High: large users (20 to 70 GWh), levy included.'
+    },
+    ie: {
+      label: 'Ireland', symbol: '€', currency: 'EUR', low: 0.1636, central: 0.1654, high: 0.2060, source: 'S24',
+      basis: 'Eurostat non-household prices, first half of 2026. Low: users of 150 GWh a year or more, all taxes excluded. ' +
+        'Central: the same band, VAT and recoverable taxes excluded. High: 20 to 70 GWh a year, VAT excluded.'
+    },
+    us: {
+      label: 'US', symbol: '$', currency: 'USD', low: 0.0680, central: 0.0909, high: 0.1404, source: 'S25',
+      basis: 'EIA average prices, January to August 2026. Low: industrial price in a cheap state (5th percentile of the ' +
+        '50 states and DC). Central: US average industrial price. High: US average commercial price. State prices ' +
+        'vary widely: industrial 5.2¢ (New Mexico) to 38¢ (Hawaii).'
+    }
+  };
+  var PRICE_REGIONS = ['uk', 'ie', 'us'];
 
   /* Sources (PLAN.md section 1). */
   var SOURCES = [
@@ -140,8 +174,11 @@
     { id: 'S18', title: 'Anthropic and Amazon expand compute partnership / Google and Broadcom partnership', organisation: 'Anthropic', date: '20 Apr 2026 and 6 Apr 2026', url: 'https://www.anthropic.com/news/anthropic-amazon-compute', extraUrl: 'https://www.anthropic.com/news/google-broadcom-partnership-compute', figure: 'Claude is trained and served on AWS Trainium, Google TPUs and NVIDIA GPUs.' },
     { id: 'S19', title: 'AI data centres directory: Anthropic–Amazon New Carlisle', organisation: 'Epoch AI', date: 'updated 19 Oct 2026', url: 'https://epoch.ai/data/ai-data-centers/directory/anthropic-amazon-new-carlisle', figure: 'The New Carlisle, Indiana site is part of the Anthropic–Amazon Project Rainier collaboration.' },
     { id: 'S20', title: 'eGRID summary data (eGRID2023)', organisation: 'US Environmental Protection Agency', date: '15 Jan 2025, rev. 12 Jun 2025', url: 'https://www.epa.gov/egrid/summary-data', figure: 'US average 349.7, RFC West 415.5, California (CAMX) 195.0 gCO2e/kWh (derived from lb/MWh).' },
-    { id: 'S21', title: 'Greenhouse gas reporting: conversion factors 2026', organisation: 'UK Department for Energy Security and Net Zero', date: '11 Jun 2026 (flat file revised 31 Jul 2026)', url: 'https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2026', figure: 'UK electricity generated 0.13096 kgCO2e/kWh (2025 data); average petrol car 0.16152 kgCO2e/km; average battery electric car 0.32763 kWh a mile (small 0.30165, large 0.33988), adjusted to real-world driving with charging losses included.' },
-    { id: 'S22', title: 'Review of typical domestic consumption values: decision', organisation: 'Ofgem', date: '27 May 2026', url: 'https://www.ofgem.gov.uk/sites/default/files/2026-05/Review%20of%20typical%20domestic%20consumption%20values%20decision.pdf', figure: 'Typical GB household electricity: medium 2,500 kWh a year.' }
+    { id: 'S21', title: 'Greenhouse gas reporting: conversion factors 2026', organisation: 'UK Department for Energy Security and Net Zero', date: '11 Jun 2026 (flat file revised 31 Jul 2026)', url: 'https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2026', figure: 'UK electricity generated 0.13096 kgCO2e/kWh (2025 data); average petrol car 0.16152 kgCO2e/km; average battery electric car 0.32763 kWh a mile (small 0.30165, large 0.33988), adjusted to real-world driving with charging losses included. Flights per passenger-km with radiative forcing: domestic (average passenger) 0.22928, long-haul economy 0.11704 kgCO2e; the 8% routing uplift is already included (methodology paragraph 8.38).' },
+    { id: 'S22', title: 'Review of typical domestic consumption values: decision', organisation: 'Ofgem', date: '27 May 2026', url: 'https://www.ofgem.gov.uk/sites/default/files/2026-05/Review%20of%20typical%20domestic%20consumption%20values%20decision.pdf', figure: 'Typical GB household electricity: medium 2,500 kWh a year.' },
+    { id: 'S23', title: 'Gas and electricity prices in the non-domestic sector (Quarterly Energy Prices tables 3.4.1 and 3.4.2)', organisation: 'UK Department for Energy Security and Net Zero', date: '29 Sep 2026', url: 'https://www.gov.uk/government/statistical-data-sets/gas-and-electricity-prices-in-the-non-domestic-sector', figure: 'Electricity, Q2 2026, pence per kWh excluding VAT: extra large (over 150 GWh a year) 21.78 without the Climate Change Levy and 22.25 with it; very large (70 to 150 GWh) 22.70 with the levy; large (20 to 70 GWh) 24.42 with the levy.' },
+    { id: 'S24', title: 'Electricity prices for non-household consumers, bi-annual data (nrg_pc_205)', organisation: 'Eurostat', date: 'updated 19 Oct 2026', url: 'https://ec.europa.eu/eurostat/databrowser/view/nrg_pc_205/default/table?lang=en', figure: 'Ireland, first half of 2026, € per kWh: 150 GWh a year or more 0.1654 excluding VAT and recoverable taxes (0.1636 excluding all taxes); 20 to 70 GWh 0.2060 excluding VAT. EU average for 150 GWh or more: 0.1128.' },
+    { id: 'S25', title: 'Electric Power Monthly, Table 5.6.B: average price of electricity by end-use sector and state, year to date', organisation: 'US Energy Information Administration', date: 'data to August 2026 (2026 values preliminary)', url: 'https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_06_b', figure: 'Cents per kWh, January to August 2026: US average commercial 14.04, industrial 9.09. Industrial by state 5.19 (New Mexico) to 37.83 (Hawaii); 5th percentile of the 50 states and DC 6.80 (derived). Virginia commercial 11.20, industrial 10.07; Texas 8.60 and 6.77; Oregon 10.59 and 8.38.' }
   ];
 
   var RESEARCH_DATE = '20 November 2026';
@@ -404,6 +441,15 @@
     return estimateRange(inputs);
   }
 
+  // What an amount of electricity costs at one region's business prices, at one level.
+  function electricityCost(kWh, region, level) {
+    checkNonNegative(kWh, 'kWh');
+    if (!PRICES[region]) throw new RangeError('unknown price region ' + region);
+    var lvl = level || 'central';
+    if (LEVELS.indexOf(lvl) < 0) throw new RangeError('unknown level ' + lvl);
+    return kWh * PRICES[region][lvl];
+  }
+
   // Everyday comparisons for an amount of electricity and emissions.
   function comparisons(kWh, kgCO2e) {
     checkNonNegative(kWh, 'kWh');
@@ -414,6 +460,8 @@
       carMiles: kgCO2e / COMPARISONS.petrolCarKgPerMile,
       ukGridKg: kWh * COMPARISONS.ukGridKgPerKWh,
       evMiles: kWh / COMPARISONS.evKWhPerMile,
+      lonEdiFlights: kgCO2e / COMPARISONS.lonEdiReturnKg,
+      lonNycFlights: kgCO2e / COMPARISONS.lonNycReturnKg,
       geminiPrompts: kWh * 1000 / COMPARISONS.geminiPromptWh
     };
   }
@@ -553,9 +601,13 @@
 
   /*
    * Monte Carlo percentiles of weekly kWh and kg CO2e (total, including
-   * embodied emissions when they are switched on). inputs as for
-   * resolveInputs; options: { n, seed }. Returns
-   * { n, seed, kWh: {p2_5, p5, p50, p95, p97_5, mean}, kgCO2e: {...} }.
+   * embodied emissions when they are switched on), and of the electricity's
+   * cost at each region's business prices. Each price is drawn from its own
+   * low/central/high range (5th/95th percentiles) on a separate random
+   * stream, so adding prices doesn't change the kWh and CO2e draws.
+   * inputs as for resolveInputs; options: { n, seed }. Returns
+   * { n, seed, kWh: {p2_5, p5, p50, p95, p97_5, mean}, kgCO2e: {...},
+   *   cost: { uk: {...}, ie: {...}, us: {...} } }.
    */
   function simulate(inputs, options) {
     inputs = inputs || {};
@@ -574,6 +626,9 @@
     var wOver = inputs.whPerMTok || {};
     var kwh = new Array(n);
     var kg = new Array(n);
+    var priceRand = seededRandom((seed + 0x9E3779B9) >>> 0);
+    var cost = {};
+    PRICE_REGIONS.forEach(function (r) { cost[r] = new Array(n); });
 
     for (var i = 0; i < n; i++) {
       // Always draw the same set, used or not (see the comment above).
@@ -597,8 +652,13 @@
       var k = dataCentreKWh(serverEnergyWh(tokens, whPerMTok, base.modelMultiplier), pue);
       kwh[i] = k;
       kg[i] = emissionsKg(k, grid) + (base.includeEmbodied ? embodiedKg(k, base.embodiedGPerKWh) : 0);
+      for (var r = 0; r < PRICE_REGIONS.length; r++) {
+        cost[PRICE_REGIONS[r]][i] = k * drawFromRange(PRICES[PRICE_REGIONS[r]], standardNormal(priceRand));
+      }
     }
-    return { n: n, seed: seed, kWh: summarise(kwh), kgCO2e: summarise(kg) };
+    var costSummary = {};
+    PRICE_REGIONS.forEach(function (r) { costSummary[r] = summarise(cost[r]); });
+    return { n: n, seed: seed, kWh: summarise(kwh), kgCO2e: summarise(kg), cost: costSummary };
   }
 
   /* ---------- rounding for display ---------- */
@@ -631,6 +691,8 @@
     PUE_PRESETS: PUE_PRESETS,
     GRID_PRESETS: GRID_PRESETS,
     COMPARISONS: COMPARISONS,
+    PRICES: PRICES,
+    PRICE_REGIONS: PRICE_REGIONS,
     SOURCES: SOURCES,
     RESEARCH_DATE: RESEARCH_DATE,
     SENSITIVITY_PARAMS: SENSITIVITY_PARAMS,
@@ -647,6 +709,7 @@
     estimateRange: estimateRange,
     planScenario: planScenario,
     comparisons: comparisons,
+    electricityCost: electricityCost,
     sensitivity: sensitivity,
     SIM_SAMPLES: SIM_SAMPLES,
     SIM_SEED: SIM_SEED,

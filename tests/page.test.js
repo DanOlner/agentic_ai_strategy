@@ -388,12 +388,23 @@ function svgOf(el) {
   return svg;
 }
 
-test('the interval chart: two panels of bands, a median, the central estimate and the extremes', () => {
+test('the interval chart: five bands (kWh, CO2e, three costs), each with median, central estimate and extremes', () => {
   const { el } = loadPage();
   const svg = svgOf(el);
+  // Five band rows: electricity, emissions, and the cost at UK, Irish and US prices.
   for (const cls of ['iv-band95', 'iv-band90', 'iv-median', 'iv-central', 'iv-extreme']) {
-    assert.equal((svg.match(new RegExp('class="' + cls + '"', 'g')) || []).length, 2, cls);
+    assert.equal((svg.match(new RegExp('class="' + cls + '"', 'g')) || []).length, 5, cls);
   }
+  assert.match(svg, /Share of a return flight, London–Edinburgh/);
+  assert.match(svg, /Share of a return flight, London–New York \(economy\)/);
+  assert.match(svg, /Cost of the electricity a week, at business prices/);
+  const sim = M.simulate({ planId: 'max' });
+  for (const r of M.PRICE_REGIONS) {
+    const P = M.PRICES[r];
+    assert.ok(svg.includes('median ' + P.symbol + M.formatSig(sim.cost[r].p50) + ', 90% interval ' +
+      P.symbol + M.formatSig(sim.cost[r].p5)), r);
+  }
+  assert.match(svg, />\d+(\.\d+)?%</, 'percentage ticks on the flight scales');
   assert.match(svg, /Electricity a week \(kWh\)/);
   assert.match(svg, /Emissions a week \(kg CO2e\)/);
   assert.match(svg, /Days of a typical GB home’s electricity/);
@@ -415,7 +426,9 @@ test('the headline and table show the 90% and 95% intervals, and follow the cont
   const s = M.simulate({ planId: 'max' });
   assert.equal(el['hl-kwh-ci'].textContent, M.formatSig(s.kWh.p5) + DASH + M.formatSig(s.kWh.p95));
   assert.equal(el['hl-kg-ci'].textContent, M.formatSig(s.kgCO2e.p5) + DASH + M.formatSig(s.kgCO2e.p95));
-  assert.equal((el['interval-body'].innerHTML.match(/<tr>/g) || []).length, 5);
+  assert.equal((el['interval-body'].innerHTML.match(/<tr>/g) || []).length, 10);
+  assert.match(el['interval-body'].innerHTML, /London to Edinburgh \(one passenger\)<\/th><td>4\.9%<\/td><td>1% – 20%<\/td>/);
+  assert.match(el['interval-body'].innerHTML, /UK business prices<\/th><td>£9\.9<\/td><td>£2\.8 – £33<\/td>/);
   assert.match(el['interval-body'].innerHTML, /Miles in an average electric car<\/th><td>130<\/td><td>38 – 450<\/td>/);
 
   el['plan-max'].checked = false;

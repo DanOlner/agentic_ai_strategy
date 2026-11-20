@@ -283,6 +283,7 @@ tr.highlight .bar { background: var(--accent); }
 .iv-chart { display: block; width: 100%; height: auto; overflow: visible; }
 .iv-title { fill: var(--text); font-size: 14px; font-weight: 600; }
 .iv-axis-label, .iv-note { fill: var(--text-2); font-size: 12px; }
+.iv-row-label { fill: var(--text); font-size: 13px; }
 .iv-tick-label { fill: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
 .iv-axis, .iv-tick { stroke: var(--border); stroke-width: 1; }
 .iv-band95 { fill: var(--accent-soft); }

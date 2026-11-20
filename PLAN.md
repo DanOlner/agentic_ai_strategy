@@ -446,3 +446,75 @@ The 2026 methodology paper (paragraph 5.30 and the xEV data table) says these ar
 - `tests/page.test.js` covers the headline intervals, the interval table and the static fallback. It also draws the chart in several states (default, Pro, everything set by hand, zero tokens, embodied) and checks it never contains NaN.
 
 **Also done:** the footer now links to the GitHub repository (build note 12).
+
+## 10. Added after review: flights and electricity prices
+
+Added on 20 November 2026 at the owner's request. The chart gains two flight scales under the emissions band, and a third panel shows what the week's electricity would cost at UK, Irish and US business prices. Both are also in the interval table and the low/central/high comparisons table.
+
+### Flights
+
+DESNZ 2026 conversion factors (S21), "Business travel – air", per passenger-km, including radiative forcing (RF: the extra warming from emissions at altitude, which DESNZ recommends including for the full climate effect):
+
+- domestic, to or from the UK, average passenger: 0.22928 kg CO2e;
+- long-haul, to or from the UK, economy: 0.11704 kg CO2e.
+
+The methodology paper (paragraph 8.38) says the 8% uplift for indirect routes and circling is already built into these factors, so they apply to great-circle distances. The distances are our own calculation (haversine, Earth radius 6,371 km) from the airport coordinates:
+
+- Heathrow (51.4700, −0.4543) to Edinburgh (55.9500, −3.3725) is 534 km;
+- Heathrow to New York JFK (40.6413, −73.7781) is 5,540 km.
+
+| Return flight, one passenger | kg CO2e | Central Max week as a share | Max week, 90% interval |
+|---|---|---|---|
+| London–Edinburgh | 2 × 534 × 0.22928 = 245 | 5.1% | 1% – 20% |
+| London–New York, economy | 2 × 5,540 × 0.11704 = 1,297 | 0.96% | 0.19% – 3.7% |
+
+Well-to-tank emissions of the jet fuel are left out, as they are for the electricity.
+
+### Electricity prices
+
+| Region | Source | Low | Central | High |
+|---|---|---|---|---|
+| UK, £ per kWh | S23: DESNZ Quarterly Energy Prices tables 3.4.1 and 3.4.2, Q2 2026, published 29 Sep 2026; excluding VAT | 0.2178: over 150 GWh a year, without the Climate Change Levy | 0.2225: over 150 GWh, with the levy | 0.2442: 20 to 70 GWh, with the levy |
+| Ireland, € per kWh | S24: Eurostat nrg_pc_205, first half of 2026, updated 19 Oct 2026 | 0.1636: 150 GWh or more, excluding all taxes | 0.1654: 150 GWh or more, excluding VAT and recoverable taxes | 0.2060: 20 to 70 GWh, excluding VAT |
+| US, $ per kWh | S25: EIA Electric Power Monthly Table 5.6.B, January to August 2026 (preliminary) | 0.0680: industrial, 5th percentile of the 50 states and DC (derived) | 0.0909: US average industrial | 0.1404: US average commercial |
+
+**Why these choices:**
+
+- **The largest consumer bands.** A large data centre uses hundreds of GWh a year, so the central price in each source is for the largest consumer band. In the UK, data centres can reclaim most of the Climate Change Levy through a sector Climate Change Agreement, hence the low value without it.
+- **The US has no size bands.** EIA publishes no size bands, so the industrial average stands in for a large user. The commercial average is the high value, because the table's notes say utilities may classify commercial and industrial customers by business type (NAICS) or by demand, and some bill data centres as commercial.
+
+**US state variation (S25, January to August 2026, cents per kWh):**
+
+- **Industrial:** 5.19 (New Mexico) to 37.83 (Hawaii). The middle 90% of states run from 6.80 to 21.34.
+- **Commercial:** 7.72 (North Dakota) to 42.43 (Hawaii). The middle 90% run from 9.21 to 24.18.
+- **Major data-centre locations** (our own note, not from S25):
+
+  | State | Commercial | Industrial |
+  |---|---|---|
+  | Virginia | 11.20 | 10.07 |
+  | Texas | 8.60 | 6.77 |
+  | Oregon | 10.59 | 8.38 |
+  | Georgia | 12.01 | 8.67 |
+  | California | 26.96 | 21.11 |
+
+**Context.** Ireland's 2026 first-half price for the largest band (0.1654) is about 47% above the EU average for the same band (0.1128, S24).
+
+**Caveats:**
+
+- **These are average delivered prices.** Big operators also buy through long-term contracts and power purchase agreements whose prices aren't published.
+- **Prices move from quarter to quarter.** UK extra-large prices ranged from 20.24p to 21.78p (without the levy) over the four quarters to Q2 2026.
+- **No currency conversion.** Each cost is shown in its own currency.
+
+**In the simulation.** Each price is drawn from its low/central/high range as a split lognormal (low and high as the 5th and 95th percentiles), like the other inputs. The draws come from a separate seeded stream, so adding prices leaves every kWh and CO2e figure in section 9 unchanged. The cost bands are wider than the kWh band because prices vary too.
+
+| Full Max week | Median | 90% interval | 95% interval | Every input central |
+|---|---|---|---|---|
+| Cost at UK business prices | £9.9 | £2.8 – £33 | £2.1 – £44 | £7.9 |
+| Cost at Irish business prices | €7.7 | €2.2 – €26 | €1.6 – €33 | €5.9 |
+| Cost at US business prices | $4.1 | $1.1 – $15 | $0.87 – $20 | $3.2 |
+
+### Tests
+
+- **`tests/model.test.js` section 18:** the flight factors and their arithmetic; the price data (ordering, units, sources); `electricityCost`; and the cost intervals. The cost intervals are checked for ordering and for being at least as wide as the kWh interval. The UK values above are pinned, and halving the share used must halve every cost.
+- **`tests/review.test.js`:** the assumptions table shows the prices `model.js` uses.
+- **`tests/page.test.js`:** the chart has five bands with percentage ticks on the flight scales, and the interval table has ten rows.

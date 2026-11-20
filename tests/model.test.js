@@ -85,7 +85,7 @@ test('COMPARISONS factors', () => {
 });
 
 test('every source has an id, title, organisation, date, https URL and figure; ids are unique', () => {
-  assert.equal(M.SOURCES.length, 22);
+  assert.equal(M.SOURCES.length, 25);
   const ids = new Set();
   for (const s of M.SOURCES) {
     for (const k of ['id', 'title', 'organisation', 'date', 'url', 'figure']) {
@@ -622,6 +622,60 @@ test('comparisons: miles in an average electric car (DESNZ 2026, 0.32763 kWh a m
   close(M.COMPARISONS.evKWhPerMile, 0.32763);
   close(M.comparisons(35.6227, 12.468).evMiles, 35.6227 / 0.32763);
   close(M.comparisons(1, 0).evMiles, 3.0522, 1e-4);
+});
+
+// ---------- 18. flights and electricity prices (PLAN.md section 10) ----------
+
+test('flight comparisons: return flights, one passenger, DESNZ 2026 factors with radiative forcing', () => {
+  const k = M.COMPARISONS;
+  close(k.lonEdiReturnKg, 2 * 534 * 0.22928);
+  close(k.lonNycReturnKg, 2 * 5540 * 0.11704);
+  closeAbs(k.lonEdiReturnKg, 245, 1);
+  closeAbs(k.lonNycReturnKg, 1297, 1);
+  const c = M.comparisons(35.6227, 12.468);
+  close(c.lonEdiFlights, 12.468 / k.lonEdiReturnKg);
+  close(c.lonNycFlights, 12.468 / k.lonNycReturnKg);
+  closeAbs(c.lonEdiFlights * 100, 5.09, 0.01); // a central Max week is about 5% of a London-Edinburgh return
+});
+
+test('prices: three regions, low <= central <= high, plausible per-kWh values, known sources', () => {
+  assert.deepEqual(M.PRICE_REGIONS, ['uk', 'ie', 'us']);
+  const ids = new Set(M.SOURCES.map((s) => s.id));
+  for (const r of M.PRICE_REGIONS) {
+    const p = M.PRICES[r];
+    assert.ok(p.low <= p.central && p.central <= p.high, r);
+    assert.ok(p.low > 0.03 && p.high < 0.5, r + ': per kWh, not per MWh or in pence');
+    assert.ok(ids.has(p.source), r + ' source');
+    assert.ok(p.symbol && p.basis.length > 40, r);
+  }
+  assert.deepEqual([M.PRICES.uk.central, M.PRICES.ie.central, M.PRICES.us.central], [0.2225, 0.1654, 0.0909]);
+});
+
+test('electricityCost: kWh x price at a level, with errors for bad input', () => {
+  close(M.electricityCost(100, 'uk'), 22.25);
+  close(M.electricityCost(100, 'us', 'low'), 6.8);
+  close(M.electricityCost(100, 'ie', 'high'), 20.6);
+  assert.equal(M.electricityCost(0, 'uk'), 0);
+  assert.throws(() => M.electricityCost(-1, 'uk'), RangeError);
+  assert.throws(() => M.electricityCost(1, 'fr'), RangeError);
+  assert.throws(() => M.electricityCost(1, 'uk', 'median'), RangeError);
+});
+
+test('simulate: cost intervals for each region, without moving the kWh and CO2e draws', () => {
+  const s = M.simulate({ planId: 'max' });
+  for (const r of M.PRICE_REGIONS) {
+    const q = s.cost[r];
+    for (let i = 1; i < QS.length; i++) assert.ok(q[QS[i - 1]] <= q[QS[i]], `${r} ${QS[i]}`);
+    // The cost spread is at least the kWh spread, since prices vary too.
+    assert.ok(q.p95 / q.p5 >= s.kWh.p95 / s.kWh.p5 * 0.98, r);
+    // And it sits between the cheapest and dearest price applied to the kWh interval.
+    assert.ok(q.p50 > s.kWh.p50 * M.PRICES[r].low * 0.9 && q.p50 < s.kWh.p50 * M.PRICES[r].high * 1.1, r);
+  }
+  const r2 = (x) => M.roundSig(x, 2);
+  assert.deepEqual(QS.map((q) => r2(s.cost.uk[q])), [2.1, 2.8, 9.9, 33, 44]);
+  // Halving the share used halves every cost percentile too.
+  const half = M.simulate({ planId: 'max', shareUsed: 0.5 });
+  for (const q of QS) close(half.cost.us[q], s.cost.us[q] / 2, 1e-9, q);
 });
 
 test('every exported function is covered by name in this test file', () => {

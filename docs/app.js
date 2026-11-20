@@ -371,9 +371,19 @@
       row('Days of a typical GB home’s electricity (' + fmt(k.ukHomeKWhPerDay, 3) + ' kWh a day)', cells('homeDays')),
       row('Miles in an average petrol car (' + fmt(k.petrolCarKgPerMile, 3) + ' kg CO2e a mile)', cells('carMiles')),
       row('Miles in an average electric car (' + fmt(k.evKWhPerMile, 3) + ' kWh a mile)', cells('evMiles')),
+      row('Share of a return flight, London to Edinburgh, one passenger (' + fmt(k.lonEdiReturnKg, 3) + ' kg CO2e)',
+        lch(cmp, function (x) { return pctText(x.lonEdiFlights); })),
+      row('Share of a return flight, London to New York, one economy passenger (' + fmt(k.lonNycReturnKg, 3) + ' kg CO2e)',
+        lch(cmp, function (x) { return pctText(x.lonNycFlights); })),
       row('The same electricity on the UK grid (kg CO2e at ' + fmt(k.ukGridKgPerKWh * 1000, 3) + ' g/kWh)', cells('ukGridKg')),
       row('Median Gemini text prompts (' + fmt(k.geminiPromptWh) + ' Wh each)', cells('geminiPrompts'))
-    ].join('');
+    ].concat(M.PRICE_REGIONS.map(function (r) {
+      var P = M.PRICES[r];
+      return row('Cost of the electricity at ' + PRICE_LABELS[r] + ' (' + P.symbol + fmt(P.low, 3) + ', ' + P.symbol +
+        fmt(P.central, 3) + ' and ' + P.symbol + fmt(P.high, 3) + ' per kWh)', M.LEVELS.map(function (lvl) {
+        return P.symbol + fmt(M.electricityCost(range[lvl].kWh, r, lvl));
+      }));
+    })).join('');
   }
 
   function renderDrivers(inputs, isCustom) {
@@ -406,21 +416,42 @@
 
   var lastChart = null;
 
+  function plain(x) { return fmt(x); }
+  function pctText(x) { return fmt(x * 100) + '%'; }
+  function money(symbol) { return function (x) { return symbol + fmt(x); }; }
+
+  var PRICE_LABELS = {
+    uk: 'UK business prices',
+    ie: 'Irish business prices',
+    us: 'US business prices'
+  };
+
   // Each comparison is a fixed multiple of kWh or kg, so its percentiles are
-  // the same multiple of the kWh or kg percentiles.
-  var INTERVAL_ROWS = [
-    { label: 'Electricity (kWh)', of: 'kWh', f: function () { return 1; } },
-    { label: 'Emissions (kg CO2e)', of: 'kgCO2e', f: function () { return 1; } },
-    { label: 'Days of a typical GB home’s electricity', of: 'kWh', f: function () { return 1 / M.COMPARISONS.ukHomeKWhPerDay; } },
-    { label: 'Miles in an average electric car', of: 'kWh', f: function () { return 1 / M.COMPARISONS.evKWhPerMile; } },
-    { label: 'Miles in an average petrol car', of: 'kgCO2e', f: function () { return 1 / M.COMPARISONS.petrolCarKgPerMile; } }
-  ];
+  // the same multiple of the kWh or kg percentiles. Costs come from the
+  // simulation itself, because prices vary too.
+  function intervalRows(sim) {
+    var k = M.COMPARISONS;
+    var rows = [
+      { label: 'Electricity (kWh)', q: sim.kWh, f: 1, show: plain },
+      { label: 'Emissions (kg CO2e)', q: sim.kgCO2e, f: 1, show: plain },
+      { label: 'Days of a typical GB home’s electricity', q: sim.kWh, f: 1 / k.ukHomeKWhPerDay, show: plain },
+      { label: 'Miles in an average electric car', q: sim.kWh, f: 1 / k.evKWhPerMile, show: plain },
+      { label: 'Miles in an average petrol car', q: sim.kgCO2e, f: 1 / k.petrolCarKgPerMile, show: plain },
+      { label: 'Share of a return flight, London to Edinburgh (one passenger)', q: sim.kgCO2e, f: 1 / k.lonEdiReturnKg, show: pctText },
+      { label: 'Share of a return flight, London to New York (one economy passenger)', q: sim.kgCO2e, f: 1 / k.lonNycReturnKg, show: pctText }
+    ];
+    M.PRICE_REGIONS.forEach(function (r) {
+      rows.push({ label: 'Cost of the electricity at ' + PRICE_LABELS[r], q: sim.cost[r], f: 1, show: money(M.PRICES[r].symbol) });
+    });
+    return rows;
+  }
 
   function renderIntervalTable(sim) {
-    el.intervals.innerHTML = INTERVAL_ROWS.map(function (r) {
-      var q = sim[r.of];
-      var f = r.f();
-      return row(r.label, [fmt(q.p50 * f), fmt(q.p5 * f) + DASH + fmt(q.p95 * f), fmt(q.p2_5 * f) + DASH + fmt(q.p97_5 * f)]);
+    el.intervals.innerHTML = intervalRows(sim).map(function (r) {
+      var q = r.q;
+      var f = r.f;
+      return row(r.label, [r.show(q.p50 * f), r.show(q.p5 * f) + DASH + r.show(q.p95 * f),
+        r.show(q.p2_5 * f) + DASH + r.show(q.p97_5 * f)]);
     }).join('');
   }
 
@@ -445,83 +476,124 @@
     return ticks.filter(function (v, i) { return i % step === 0; });
   }
 
+  // Split a label into lines of at most maxChars, at spaces.
+  function wrapText(str, maxChars) {
+    if (str.length <= maxChars) return [str];
+    var lines = [];
+    var cur = '';
+    str.split(' ').forEach(function (w) {
+      if (cur && (cur + ' ' + w).length > maxChars) { lines.push(cur); cur = w; } else { cur = cur ? cur + ' ' + w : w; }
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
   function svgText(x, y, str, cls, anchor) {
     return '<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" class="' + cls + '"' +
       (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + esc(str) + '</text>';
   }
 
-  function renderChart(data) {
-    if (!data) return;
+  /*
+   * The chart: panels of bands on log scales. Each band row has the 95% and
+   * 90% intervals, the median, the all-central estimate and the all-low to
+   * all-high extremes, then its own axis and any comparison axes, which read
+   * the same positions in other units (f converts the row's units to the
+   * axis's units).
+   */
+  function chartPanels(data) {
     var sim = data.sim;
     var range = data.range;
+    var k = M.COMPARISONS;
+    return [
+      { title: 'Electricity' + data.period + ' (kWh)', rows: [{
+        q: sim.kWh, lo: range.low.kWh, hi: range.high.kWh, central: range.central.kWh, show: plain,
+        axes: [{ label: 'Days of a typical GB home’s electricity', f: 1 / k.ukHomeKWhPerDay, show: plain },
+          { label: 'Miles in an average electric car', f: 1 / k.evKWhPerMile, show: plain }]
+      }] },
+      { title: 'Emissions' + data.period + ' (kg CO2e)', rows: [{
+        q: sim.kgCO2e, lo: range.low.totalKgCO2e, hi: range.high.totalKgCO2e, central: range.central.totalKgCO2e, show: plain,
+        axes: [{ label: 'Miles in an average petrol car', f: 1 / k.petrolCarKgPerMile, show: plain },
+          { label: 'Share of a return flight, London–Edinburgh', f: 100 / k.lonEdiReturnKg,
+            show: function (t) { return fmt(t) + '%'; } },
+          { label: 'Share of a return flight, London–New York (economy)', f: 100 / k.lonNycReturnKg,
+            show: function (t) { return fmt(t) + '%'; } }]
+      }] },
+      { title: 'Cost of the electricity' + data.period + ', at business prices', rows: M.PRICE_REGIONS.map(function (r) {
+        var P = M.PRICES[r];
+        return {
+          label: PRICE_LABELS[r] + ' (' + P.symbol + ')', q: sim.cost[r], show: money(P.symbol),
+          lo: range.low.kWh * P.low, hi: range.high.kWh * P.high, central: range.central.kWh * P.central, axes: []
+        };
+      }) }
+    ];
+  }
+
+  function renderChart(data) {
+    if (!data) return;
     var W = Math.round(Math.max(280, Math.min(960, el.chart.clientWidth || 640)));
     var x0 = 14;
     var x1 = W - 14;
-    var maxTicks = Math.max(3, Math.floor((x1 - x0) / 58));
-    var panels = [
-      { title: 'Electricity' + data.period + ' (kWh)', q: sim.kWh, lo: range.low.kWh, hi: range.high.kWh, central: range.central.kWh,
-        axes: [{ label: 'Days of a typical GB home’s electricity', f: 1 / M.COMPARISONS.ukHomeKWhPerDay },
-          { label: 'Miles in an average electric car', f: 1 / M.COMPARISONS.evKWhPerMile }] },
-      { title: 'Emissions' + data.period + ' (kg CO2e)', q: sim.kgCO2e, lo: range.low.totalKgCO2e, hi: range.high.totalKgCO2e,
-        central: range.central.totalKgCO2e,
-        axes: [{ label: 'Miles in an average petrol car', f: 1 / M.COMPARISONS.petrolCarKgPerMile }] }
-    ];
+    var maxTicks = Math.max(3, Math.floor((x1 - x0) / 60));
+    var maxChars = Math.floor((x1 - x0) / 6.8); // about 6.5px a character at 12-13px
     var out = [];
-    var y = 0;
+    // Draw a label, wrapped if it is too long for the width; returns the height used.
+    function label(str, yTop, cls, size) {
+      var lines = wrapText(str, size === 'title' ? Math.floor(maxChars * 0.82) : maxChars);
+      lines.forEach(function (ln, i) { out.push(svgText(x0, yTop + (size === 'title' ? 15 : 12) + i * 16, ln, cls)); });
+      return lines.length * 16 + (size === 'title' ? 10 : 0);
+    }
     var summary = [];
+    var y = 0;
 
-    panels.forEach(function (p) {
-      out.push(svgText(x0, y + 15, p.title, 'iv-title'));
-      y += 26;
-      var vals = [p.lo, p.hi, p.q.p2_5, p.q.p97_5, p.central];
-      var dLo = Math.min.apply(null, vals);
-      var dHi = Math.max.apply(null, vals);
-      if (!(dLo > 0) || !isFinite(dHi)) {
-        out.push(svgText(x0, y + 16, 'Nothing to plot: there are no tokens.', 'iv-note'));
-        y += 34;
-        summary.push(p.title + ': zero');
-        return;
-      }
-      if (dHi / dLo < 4) { var mid = Math.sqrt(dLo * dHi); dLo = mid / 2.5; dHi = mid * 2.5; }
-      dLo /= 1.25;
-      dHi *= 1.25;
-      var span = Math.log(dHi) - Math.log(dLo);
-      var X = function (v) { return x0 + (Math.log(Math.max(v, dLo)) - Math.log(dLo)) / span * (x1 - x0); };
-      var yc = y + 14;
-      var q = p.q;
-
-      // All-low to all-high, then the 95% and 90% bands, the median and the central estimate.
-      out.push('<line class="iv-extreme" x1="' + X(p.lo).toFixed(1) + '" x2="' + X(p.hi).toFixed(1) + '" y1="' + yc + '" y2="' + yc + '"/>');
-      [p.lo, p.hi].forEach(function (v) {
-        out.push('<line class="iv-extreme-cap" x1="' + X(v).toFixed(1) + '" x2="' + X(v).toFixed(1) + '" y1="' + (yc - 6) + '" y2="' + (yc + 6) + '"/>');
-      });
-      out.push('<rect class="iv-band95" x="' + X(q.p2_5).toFixed(1) + '" y="' + (yc - 11) + '" width="' +
-        Math.max(1, X(q.p97_5) - X(q.p2_5)).toFixed(1) + '" height="22" rx="3"/>');
-      out.push('<rect class="iv-band90" x="' + X(q.p5).toFixed(1) + '" y="' + (yc - 11) + '" width="' +
-        Math.max(1, X(q.p95) - X(q.p5)).toFixed(1) + '" height="22" rx="3"/>');
-      out.push('<line class="iv-median" x1="' + X(q.p50).toFixed(1) + '" x2="' + X(q.p50).toFixed(1) + '" y1="' + (yc - 15) + '" y2="' + (yc + 15) + '"/>');
-      out.push('<circle class="iv-central" cx="' + X(p.central).toFixed(1) + '" cy="' + yc + '" r="4.5"/>');
-      y += 34;
-
-      // Axes: the quantity itself, then each comparison on the same scale.
-      var axes = [{ label: null, f: 1 }].concat(p.axes);
-      axes.forEach(function (a) {
-        if (a.label) {
-          out.push(svgText(x0, y + 13, a.label, 'iv-axis-label'));
-          y += 18;
+    chartPanels(data).forEach(function (panel) {
+      y += label(panel.title, y, 'iv-title', 'title');
+      panel.rows.forEach(function (rw) {
+        if (rw.label) y += label(rw.label, y, 'iv-row-label');
+        var q = rw.q;
+        var vals = [rw.lo, rw.hi, q.p2_5, q.p97_5, rw.central];
+        var dLo = Math.min.apply(null, vals);
+        var dHi = Math.max.apply(null, vals);
+        if (!(dLo > 0) || !isFinite(dHi)) {
+          out.push(svgText(x0, y + 16, 'Nothing to plot: there are no tokens.', 'iv-note'));
+          y += 30;
+          summary.push((rw.label || panel.title) + ': zero');
+          return;
         }
-        out.push('<line class="iv-axis" x1="' + x0 + '" x2="' + x1 + '" y1="' + y + '" y2="' + y + '"/>');
-        logTicks(dLo * a.f, dHi * a.f, maxTicks).forEach(function (t) {
-          var x = X(t / a.f);
-          var anchor = x < x0 + 16 ? 'start' : (x > x1 - 16 ? 'end' : 'middle');
-          out.push('<line class="iv-tick" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + y + '" y2="' + (y + 5) + '"/>');
-          out.push(svgText(x, y + 18, fmt(t), 'iv-tick-label', anchor));
+        if (dHi / dLo < 4) { var mid = Math.sqrt(dLo * dHi); dLo = mid / 2.5; dHi = mid * 2.5; }
+        dLo /= 1.25;
+        dHi *= 1.25;
+        var span = Math.log(dHi) - Math.log(dLo);
+        var X = function (v) { return x0 + (Math.log(Math.max(v, dLo)) - Math.log(dLo)) / span * (x1 - x0); };
+        var yc = y + 14;
+
+        out.push('<line class="iv-extreme" x1="' + X(rw.lo).toFixed(1) + '" x2="' + X(rw.hi).toFixed(1) + '" y1="' + yc + '" y2="' + yc + '"/>');
+        [rw.lo, rw.hi].forEach(function (v) {
+          out.push('<line class="iv-extreme-cap" x1="' + X(v).toFixed(1) + '" x2="' + X(v).toFixed(1) + '" y1="' + (yc - 6) + '" y2="' + (yc + 6) + '"/>');
         });
-        y += 28;
+        out.push('<rect class="iv-band95" x="' + X(q.p2_5).toFixed(1) + '" y="' + (yc - 11) + '" width="' +
+          Math.max(1, X(q.p97_5) - X(q.p2_5)).toFixed(1) + '" height="22" rx="3"/>');
+        out.push('<rect class="iv-band90" x="' + X(q.p5).toFixed(1) + '" y="' + (yc - 11) + '" width="' +
+          Math.max(1, X(q.p95) - X(q.p5)).toFixed(1) + '" height="22" rx="3"/>');
+        out.push('<line class="iv-median" x1="' + X(q.p50).toFixed(1) + '" x2="' + X(q.p50).toFixed(1) + '" y1="' + (yc - 15) + '" y2="' + (yc + 15) + '"/>');
+        out.push('<circle class="iv-central" cx="' + X(rw.central).toFixed(1) + '" cy="' + yc + '" r="4.5"/>');
+        y += 34;
+
+        [{ label: null, f: 1, show: rw.show }].concat(rw.axes).forEach(function (a) {
+          if (a.label) y += label(a.label, y + 1, 'iv-axis-label') + 2;
+          out.push('<line class="iv-axis" x1="' + x0 + '" x2="' + x1 + '" y1="' + y + '" y2="' + y + '"/>');
+          logTicks(dLo * a.f, dHi * a.f, maxTicks).forEach(function (t) {
+            var x = X(t / a.f);
+            var anchor = x < x0 + 16 ? 'start' : (x > x1 - 16 ? 'end' : 'middle');
+            out.push('<line class="iv-tick" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + y + '" y2="' + (y + 5) + '"/>');
+            out.push(svgText(x, y + 18, a.show(t), 'iv-tick-label', anchor));
+          });
+          y += 28;
+        });
+        summary.push((rw.label || panel.title) + ': median ' + rw.show(q.p50) + ', 90% interval ' + rw.show(q.p5) + DASH +
+          rw.show(q.p95) + ', 95% interval ' + rw.show(q.p2_5) + DASH + rw.show(q.p97_5));
+        y += 6;
       });
-      summary.push(p.title + ': median ' + fmt(q.p50) + ', 90% interval ' + fmt(q.p5) + DASH + fmt(q.p95) +
-        ', 95% interval ' + fmt(q.p2_5) + DASH + fmt(q.p97_5));
-      y += 12;
+      y += 8;
     });
 
     var H = Math.round(y);

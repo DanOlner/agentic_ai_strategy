@@ -262,6 +262,12 @@ test('the assumptions tables show the values model.js uses', () => {
   assert.match(html, new RegExp(M.formatSig(M.COMPARISONS.ukGridKgPerKWh * 1000, 3) + ' g CO2e per kWh'));
   assert.match(html, new RegExp(M.formatSig(M.COMPARISONS.petrolCarKgPerMile, 2) + ' kg CO2e a mile'));
   assert.match(html, new RegExp(M.PARAMS.embodiedGPerKWh + ' g CO2e per kWh'));
+  // Business electricity prices (PLAN.md section 10).
+  for (const [label, r] of [['UK business price \\(£ per kWh\\)', 'uk'], ['Irish business price \\(€ per kWh\\)', 'ie'], ['US business price \\(\\$ per kWh\\)', 'us']]) {
+    assert.deepEqual(rowCells(label), lch(M.PRICES[r]), r);
+  }
+  assert.match(html, /2 × 534 km at 0\.22928/);
+  assert.match(html, /2 × 5,540 km at 0\.11704/);
 });
 
 test('the uncertainty notice quotes the spread the model actually gives', () => {
